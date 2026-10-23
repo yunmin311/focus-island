@@ -175,18 +175,14 @@ onUnmounted(() => {
 
         <!-- Dots indicator -->
         <div
-            v-if="carouselItems.length > 1"
-            class="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-1"
+            v-if="carouselItems.length > 1 && carouselItems.length <= 6"
+            class="carousel-dots"
         >
-            <div
+            <span
                 v-for="(item, i) in carouselItems"
                 :key="item.key"
-                class="w-1 h-1 rounded-full transition-colors duration-300"
-                :class="
-                    i === carouselIndex % carouselItems.length
-                        ? 'bg-[var(--capsule-dot)]'
-                        : 'bg-[var(--capsule-dot-idle)]'
-                "
+                class="carousel-dot"
+                :class="{ 'is-active': i === carouselIndex % carouselItems.length }"
             />
         </div>
     </div>
@@ -209,6 +205,64 @@ onUnmounted(() => {
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
 }
+.carousel-dots {
+    position: absolute;
+    left: 50%;
+    bottom: calc(4px * var(--island-scale, 1));
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: calc(5px * var(--island-scale, 1));
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* 与底边高光呼应的一条极淡轨道，让指示器读起来是玻璃边缘的一部分 */
+.carousel-dots::after {
+    content: "";
+    position: absolute;
+    left: calc(-10px * var(--island-scale, 1));
+    right: calc(-10px * var(--island-scale, 1));
+    top: calc(100% + 1px);
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--capsule-dot-idle), transparent);
+    opacity: 0.7;
+}
+
+.carousel-dot {
+    width: calc(3px * var(--island-scale, 1));
+    height: calc(2px * var(--island-scale, 1));
+    border-radius: 999px;
+    background: var(--capsule-dot-idle);
+    transition:
+        width 0.34s cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 0.24s ease;
+    animation: dot-in 0.26s ease both;
+}
+
+.carousel-dot:nth-child(2) { animation-delay: 0.04s; }
+.carousel-dot:nth-child(3) { animation-delay: 0.08s; }
+.carousel-dot:nth-child(4) { animation-delay: 0.12s; }
+.carousel-dot:nth-child(5) { animation-delay: 0.16s; }
+.carousel-dot:nth-child(6) { animation-delay: 0.2s; }
+
+.carousel-dot.is-active {
+    width: calc(8px * var(--island-scale, 1));
+    background: var(--capsule-dot);
+}
+
+@keyframes dot-in {
+    from { opacity: 0; transform: translateY(1px); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .carousel-dot {
+        animation: none;
+        transition: background-color 0.24s ease;
+    }
+}
+
 .wave-bars {
     display: flex;
     align-items: flex-end;

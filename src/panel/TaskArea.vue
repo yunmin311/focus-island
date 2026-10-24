@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onBeforeUnmount, onDeactivated } from 'vue'
+import { computed, ref, onBeforeUnmount, onDeactivated } from 'vue'
 import { useTasks, type Task } from '../composables/useTasks'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { useRadio } from '../composables/useRadio'
 import { useTaskGroups } from '../composables/useTaskGroups'
+import { useSettings } from '../composables/useSettings'
 import { getCategoryColor } from '../composables/useMemos'
 
 const emit = defineEmits<{ close: []; navigateToTodo: [tab?: string] }>()
@@ -32,6 +33,17 @@ const {
   abandon,
 } = useTimerBridge()
 const { playing, loading, currentStation, toggle: toggleRadio } = useRadio()
+const { settings } = useSettings()
+
+// 快速专注：不依赖 TODO，直接用虚拟任务启动一个番茄
+const QUICK_TASK_ID = 'quick-focus'
+const QUICK_TASK_TITLE = '快速专注'
+const quickActive = computed(() => activeTaskId.value === QUICK_TASK_ID)
+
+function startQuick() {
+  if (activeTaskId.value) return
+  start(QUICK_TASK_ID, QUICK_TASK_TITLE)
+}
 
 // --- Quick-add state ---
 const newTitle = ref('')
@@ -153,13 +165,23 @@ function handleDoneTask(taskId: string) {
   <div class="home-page">
     <!-- Zone 1: Quick-add -->
     <div class="quick-add-zone">
-      <input
-        ref="quickAddRef"
-        v-model="newTitle"
-        class="quick-add-input"
-        placeholder="接下来专注做什么... (Shift+Enter 闪电开始)"
-        @keydown="handleInput"
-      />
+      <div class="quick-add-row">
+        <input
+          ref="quickAddRef"
+          v-model="newTitle"
+          class="quick-add-input"
+          placeholder="接下来专注做什么... (Shift+Enter 闪电开始)"
+          @keydown="handleInput"
+        />
+        <button
+          class="quick-add-btn"
+          :disabled="!!activeTaskId"
+          :title="`无需任务，直接开始 ${settings.focusDuration} 分钟专注`"
+          @click="startQuick"
+        >
+          ▶ {{ settings.focusDuration }}′
+        </button>
+      </div>
     </div>
 
     <!-- Zone 2: Focus Queue (Recent 3) -->
@@ -167,11 +189,32 @@ function handleDoneTask(taskId: string) {
       <div class="zone-header">核心专注区</div>
 
       <div class="focus-container">
-        <div v-if="recentTasks.length === 0" class="focus-empty">
+        <!-- 快速专注运行态：与任务同一块核心专注区 -->
+        <div
+          v-if="quickActive"
+          class="focus-task-item is-running"
+          :style="{ '--active-color': phase === 'break' ? 'var(--break-color)' : 'var(--focus-color)' }"
+        >
+          <div class="running-card">
+            <div class="running-header">
+              <span class="running-dot">●</span>
+              <span class="running-title">{{ phase === 'break' ? '休息中' : '快速专注' }}</span>
+              <span class="task-timer">{{ displayTime }}</span>
+            </div>
+            <div class="running-actions">
+              <button class="run-btn pause-btn" @click="running ? pause() : resume()">
+                {{ running ? '❚❚ 暂停' : '▶ 继续' }}
+              </button>
+              <button class="run-btn abandon-btn" @click="abandon()">■ 停止</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="recentTasks.length === 0 && !quickActive" class="focus-empty">
           <span class="focus-empty-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </span>
-          <span class="focus-empty-text">在 TODO 中选择任务开始专注</span>
+          <span class="focus-empty-text">还没有任务，点右上角 ▶ 直接开始</span>
         </div>
 
         <div
@@ -390,6 +433,49 @@ function handleDoneTask(taskId: string) {
 }
 
 /* ===== Focus Zone ===== */
+/* ===== Quick Focus Zone ===== */
+.quick-focus-zone {
+  display: none;
+}
+
+.quick-focus-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--focus-color) 30%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 10%, rgba(255, 255, 255, 0.03));
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.quick-focus-btn:hover {
+  background: color-mix(in srgb, var(--focus-color) 18%, rgba(255, 255, 255, 0.04));
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
+}
+
+.quick-focus-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.quick-focus-meta {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.quick-running {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .focus-zone {
   flex-shrink: 0;
 }
@@ -926,5 +1012,40 @@ function handleDoneTask(taskId: string) {
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+/* ===== 紧凑快速专注按钮 ===== */
+.quick-add-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quick-add-row .quick-add-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.quick-add-btn {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--focus-color) 30%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 10%, rgba(255, 255, 255, 0.03));
+  color: #fff;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+}
+
+.quick-add-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--focus-color) 18%, rgba(255, 255, 255, 0.04));
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
+}
+
+.quick-add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 </style>

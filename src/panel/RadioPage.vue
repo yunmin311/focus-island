@@ -407,7 +407,7 @@ async function scrollToPlaying() {
   z-index: 10;
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 8px 10px 8px;
+  padding: 8px 12px;
 }
 
 .import-bar {
@@ -916,8 +916,8 @@ async function scrollToPlaying() {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px 16px 20px;
+  gap: 12px;
+  padding: 12px 12px 20px;
   overflow-y: auto;
 }
 

@@ -6,6 +6,7 @@ import { useTimerBridge } from '../composables/useTimerBridge'
 import { getCategoryColor } from '../composables/useMemos'
 import CalendarDatePicker from './CalendarDatePicker.vue'
 import RepeatPicker from './RepeatPicker.vue'
+import BackButton from './BackButton.vue'
 
 const props = defineProps<{ taskId: string }>()
 const emit = defineEmits<{ back: [] }>()
@@ -205,11 +206,7 @@ onBeforeUnmount(() => {
     <template v-else>
       <!-- Header -->
       <header class="detail-header">
-        <button class="header-btn back-btn" @click.stop="emit('back')" title="返回">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-        </button>
+        <BackButton @click="emit('back')" />
         <span class="header-title">任务详情</span>
         <button v-if="!showDeleteConfirm" class="header-btn delete-header-btn" @click.stop="confirmDelete" title="删除任务">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -502,7 +499,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
 }
@@ -546,7 +543,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -728,7 +725,7 @@ onBeforeUnmount(() => {
 
 /* Properties section */
 .prop-section {
-  padding: 6px 14px 10px;
+  padding: 6px 12px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -846,7 +843,7 @@ onBeforeUnmount(() => {
 
 /* Notes section */
 .note-section {
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -892,7 +889,7 @@ onBeforeUnmount(() => {
 
 /* Subtask section */
 .subtask-section {
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -1082,7 +1079,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 6px 12px;
   background: color-mix(in srgb, var(--focus-color) 6%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--focus-color) 12%, transparent);
 }
@@ -1118,7 +1115,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 10px 12px;
   background: rgba(248, 113, 113, 0.08);
   border-bottom: 1px solid rgba(248, 113, 113, 0.15);
 }

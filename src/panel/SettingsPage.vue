@@ -566,7 +566,7 @@ onUnmounted(() => {
 }
 
 .settings-section {
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 

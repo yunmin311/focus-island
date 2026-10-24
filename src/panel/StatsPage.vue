@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
 import { useTasks, getTaskTimeCategory, todayString, isRepeatActiveOn } from '../composables/useTasks'
@@ -17,6 +17,11 @@ const timeRange = ref<TimeRange>('today')
 const currentMonth = ref(new Date())
 const heatExpanded = ref(false)
 const selectedDate = ref<string | null>(getDateString())
+
+// 跨天后如果仍停留在“今天”，自动跟随到新的一天
+watch(todayString, (next, prev) => {
+  if (selectedDate.value === prev) selectedDate.value = next
+})
 
 const timeRangeOptions: { value: TimeRange; label: string }[] = [
   { value: 'today', label: '今日' },
@@ -131,8 +136,19 @@ const selectedScheduledTasks = computed(() => {
 })
 
 const monthDailyTasks = computed(() => {
-  const ym = `${currentMonth.value.getFullYear()}-${String(currentMonth.value.getMonth() + 1).padStart(2, '0')}`
+  const year = currentMonth.value.getFullYear()
+  const month = currentMonth.value.getMonth()
+  const ym = `${year}-${String(month + 1).padStart(2, '0')}`
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const monthStart = `${ym}-01`
+  const monthEnd = `${ym}-${String(daysInMonth).padStart(2, '0')}`
+
   return dailyTasks.value
+    .filter(t => {
+      const start = t.repeatStart ?? t.dueDate ?? ''
+      const end = t.repeatEnd ?? '9999-12-31'
+      return (!start || start <= monthEnd) && end >= monthStart
+    })
     .map(t => ({
       id: t.id,
       title: t.title,

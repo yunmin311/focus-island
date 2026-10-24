@@ -1073,7 +1073,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
 }
@@ -1341,7 +1341,7 @@ onBeforeUnmount(() => {
 .overdue-divider {
   display: flex;
   align-items: center;
-  padding: 10px 14px 6px;
+  padding: 10px 12px 6px;
   gap: 12px;
 }
 
@@ -1387,7 +1387,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 10px 20px;
+  padding: 8px 12px 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;

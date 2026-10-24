@@ -385,7 +385,7 @@ function handleDoneTask(taskId: string) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 12px;
   height: 100%;
   overflow-y: auto;
   background: transparent;

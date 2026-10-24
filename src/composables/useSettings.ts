@@ -100,7 +100,9 @@ function applyThemeToDOM() {
   const root = document.documentElement
   const resolvedColorMode = resolveColorMode(settings.value.colorMode)
   root.dataset.colorMode = resolvedColorMode
-  root.style.colorScheme = resolvedColorMode
+  // 浅色面板通过 --panel-root-filter 反色实现；原生滚动条 / range 滑块
+  // 必须保持 dark 配色，反色后才会呈现浅色，否则会残留成黑色。
+  root.style.colorScheme = 'dark'
   root.style.setProperty('--focus-color', theme.focusColor)
   root.style.setProperty('--break-color', theme.breakColor)
   root.style.setProperty('--idle-color', theme.idleColor)

@@ -14,7 +14,8 @@ interface MacosUpdateHealth {
 
 const AUTO_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000
 const LAST_AUTO_CHECK_KEY = 'focus-island:last-update-check'
-const GITHUB_RELEASES_URL = 'https://github.com/ipfred/focus-island/releases/latest'
+// 定制版：手动下载入口指向自己的仓库（应用内更新本身已禁用）
+const GITHUB_RELEASES_URL = 'https://github.com/yunmin311/focus-island/releases/latest'
 const UPDATE_CHECK_TIMEOUT_MS = 30000  // 增加到 30 秒，应对国内网络环境
 const UPDATE_DOWNLOAD_TIMEOUT_MS = 120000
 

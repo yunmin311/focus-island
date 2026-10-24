@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
 import { useTasks, getTaskTimeCategory } from '../composables/useTasks'
+import BackButton from './BackButton.vue'
 
 type TimeRange = 'today' | 'week' | 'month' | 'all'
 
@@ -132,11 +133,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   <div class="stats-page">
     <!-- Header -->
     <div class="page-header">
-      <button class="back-btn" @click="emit('back')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </button>
+      <BackButton @click="emit('back')" />
       <h2 class="page-title">统计</h2>
       <div class="time-range-tabs">
         <button

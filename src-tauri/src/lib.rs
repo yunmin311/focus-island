@@ -754,6 +754,64 @@ fn is_mouse_over_island_inner<R: Runtime>(window: &WebviewWindow<R>, pad: f64) -
         && my <= (layout.y + layout.h) as f64 + pad_px
 }
 
+// 低级鼠标钩子：记录左键按下的真实屏幕坐标。
+// 不能用 GetAsyncKeyState 的"按下过"位——它与位置无关，
+// 在别处点击后 120ms 内移到岛上会被误判成"点了刘海"。
+#[cfg(target_os = "windows")]
+mod mouse_hook {
+    use std::sync::Mutex;
+    use std::time::Instant;
+    use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, GetMessageW, MSLLHOOKSTRUCT, MSG, SetWindowsHookExW, WH_MOUSE_LL,
+        WM_LBUTTONDOWN,
+    };
+
+    pub static PENDING_CLICK: Mutex<Option<(i32, i32, Instant)>> = Mutex::new(None);
+
+    unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if code >= 0 && wparam.0 as u32 == WM_LBUTTONDOWN {
+            let info = &*(lparam.0 as *const MSLLHOOKSTRUCT);
+            if let Ok(mut slot) = PENDING_CLICK.lock() {
+                *slot = Some((info.pt.x, info.pt.y, Instant::now()));
+            }
+        }
+        CallNextHookEx(None, code, wparam, lparam)
+    }
+
+    pub fn install() {
+        std::thread::spawn(|| unsafe {
+            let Ok(_hook) = SetWindowsHookExW(WH_MOUSE_LL, Some(hook_proc), None, 0) else {
+                return;
+            };
+            let mut msg = MSG::default();
+            while GetMessageW(&mut msg, None, 0, 0).as_bool() {}
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn take_pending_click_inside<R: Runtime>(window: &WebviewWindow<R>, pad: f64) -> bool {
+    let Some(layout) = island_layout() else { return false };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let pad_px = (pad * scale).round() as i32;
+
+    let Ok(mut slot) = mouse_hook::PENDING_CLICK.lock() else {
+        return false;
+    };
+    let Some((x, y, at)) = slot.take() else {
+        return false;
+    };
+    if at.elapsed().as_millis() > 1200 {
+        return false;
+    }
+
+    x >= layout.x - pad_px
+        && x <= layout.x + layout.w + pad_px
+        && y >= layout.y - pad_px
+        && y <= layout.y + layout.h + pad_px
+}
+
 #[derive(serde::Serialize)]
 struct IslandInputState {
     over: bool,
@@ -761,15 +819,14 @@ struct IslandInputState {
 }
 
 /// 舞台永远点击穿透，输入由该轮询判定。
-/// Windows 用 GetAsyncKeyState 的"自上次查询以来按下"位，轮询间隔内也不会丢点击；
-/// 其他平台没有等价的跨进程按键位，只做悬停判定（点击交给系统原生命中）。
+/// 点击判定使用鼠标钩子记录的坐标，落在岛矩形内才算点击刘海；
+/// 其他平台只用悬停判定（点击交给系统原生命中）。
 #[tauri::command]
 fn poll_island_input<R: Runtime>(window: WebviewWindow<R>, pad: f64) -> IslandInputState {
     let over = is_mouse_over_island_inner(&window, pad);
     #[cfg(target_os = "windows")]
     {
-        use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
-        let clicked = over && unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) & 0x0001 != 0 };
+        let clicked = take_pending_click_inside(&window, pad);
         IslandInputState { over, clicked }
     }
     #[cfg(not(target_os = "windows"))]
@@ -1235,6 +1292,10 @@ pub fn run() {
             set_system_mute,
         ])
         .setup(|app| {
+            // 点击刘海判定依赖真实点击坐标；钩子只需要安装一次
+            #[cfg(target_os = "windows")]
+            mouse_hook::install();
+
             #[cfg(desktop)]
             {
                 app.handle().plugin(

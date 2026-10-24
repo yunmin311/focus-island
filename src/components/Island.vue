@@ -44,13 +44,17 @@ async function reportLayout() {
     }
 }
 
+// 面板是否打开（用于确保面板可见时舞台始终穿透，不挡住面板顶部按钮）
+const panelOpen = ref(false);
+
 // Watch notification visibility and toggle click-through + resize window
-watch(notificationType, (val) => {
-    const visible = val !== null;
+watch([notificationType, panelOpen], () => {
+    const visible = notificationType.value !== null;
     setNotificationVisible(visible);
     // dock（刘海）模式下点击穿透由 useDockMode 统一管理
     if (settings.value.islandDisplayMode !== "dock") {
-        invoke("set_click_through", { ignore: !visible });
+        // 面板打开时舞台必须穿透，否则 500x160 舞台会盖住面板顶部的按钮
+        invoke("set_click_through", { ignore: !visible || panelOpen.value });
     }
 });
 
@@ -228,6 +232,7 @@ onMounted(async () => {
 
     unlistenPanelMotion = await listen<string>("island-panel-motion", ({ payload }) => {
         if (payload === "open" || payload === "close") {
+            panelOpen.value = payload === "open";
             runPanelMotion(payload);
         }
     });

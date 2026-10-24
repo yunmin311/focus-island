@@ -587,6 +587,9 @@ function handleDoneTask(taskId: string) {
 .running-actions {
   display: flex;
   gap: 6px;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
 }
 
 .run-btn {

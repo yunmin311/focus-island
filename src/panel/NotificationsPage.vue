@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useNotifications, formatNotifTime } from '../composables/useNotifications'
+import BackButton from './BackButton.vue'
 
 defineEmits<{ back: [] }>()
 
@@ -61,11 +62,7 @@ onMounted(refreshVolume)
 <template>
   <div class="notif-page">
     <div class="page-topbar">
-      <button class="back-btn" @click="$emit('back')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </button>
+      <BackButton @click="$emit('back')" />
       <span class="page-title">通知中心</span>
       <button v-if="records.length" class="text-btn" @click="clearAll">清空</button>
       <span v-else class="text-btn placeholder"> </span>

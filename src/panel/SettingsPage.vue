@@ -4,13 +4,19 @@ import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } fro
 import { useUpdater } from '../composables/useUpdater'
 import { useForkUpdate } from '../composables/useForkUpdate'
 import AboutDialog from './AboutDialog.vue'
+import BackButton from './BackButton.vue'
 
 const emit = defineEmits<{ back: [] }>()
 
 // 定制构建：应用内更新指向官方版会覆盖定制内容，已禁用
 const SHOW_UPDATER = false
 
-const { settings } = useSettings()
+const { settings, resetSettings } = useSettings()
+
+function resetAllSettings() {
+  if (!window.confirm('恢复所有设置为默认？主题、透明度、显示模式、快捷键和标语都会重置。')) return
+  resetSettings()
+}
 
 // YM 版更新：只检查自己的 Release，点击后跳转下载
 const {
@@ -214,11 +220,7 @@ onUnmounted(() => {
 <template>
   <div class="settings-page" :class="{ 'blurred': showAbout }">
     <div class="settings-header">
-      <button class="back-btn" @click="goBack">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 12H5M12 19l-7-7 7-7"/>
-        </svg>
-      </button>
+      <BackButton @click="goBack" />
       <button class="about-btn" @click="showAbout = true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
@@ -459,6 +461,18 @@ onUnmounted(() => {
           <span v-else>{{ formatShortcut(settings.shortcutKey) }}</span>
         </button>
         <span class="shortcut-hint" v-if="!isRecording">推荐: Ctrl+P、Alt+Space;默认Esc 关闭面板</span>
+      </div>
+    </div>
+
+    <!-- 重置 -->
+    <div class="settings-section">
+      <div class="section-title">重置</div>
+      <div class="update-copy">
+        <span class="update-label">恢复默认设置</span>
+        <span class="update-hint">主题、透明度、显示模式、快捷键、标语全部恢复默认</span>
+      </div>
+      <div class="update-action-row">
+        <button type="button" class="update-btn" @click="resetAllSettings">恢复默认设置</button>
       </div>
     </div>
 

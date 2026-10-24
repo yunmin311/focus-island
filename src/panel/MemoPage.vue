@@ -5,6 +5,7 @@ import MemoEditor from './MemoEditor.vue'
 import MemoCategoryDialog from './MemoCategoryDialog.vue'
 import MemoCategoryDropdown from './MemoCategoryDropdown.vue'
 import MemoCategoryTag from './MemoCategoryTag.vue'
+import BackButton from './BackButton.vue'
 
 const props = defineProps<{ searchQuery?: string }>()
 const emit = defineEmits<{
@@ -178,7 +179,7 @@ function handleCloseCategoryDialog() {
     <template v-if="view === 'list'">
       <!-- Header: 返回 + 功能按钮 -->
       <div class="memo-header">
-        <button class="back-btn" @click="emit('back')">←</button>
+        <BackButton @click="emit('back')" />
         <div class="header-actions">
           <!-- 分类选择 -->
           <MemoCategoryDropdown

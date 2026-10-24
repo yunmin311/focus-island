@@ -125,11 +125,11 @@ export function useDockMode() {
     invoke<boolean>('is_panel_visible').then((v) => { panelVisible.value = v }).catch(() => {})
   })
 
-  // 舞台永远点击穿透（点击由输入轮询判定）；仅通知横幅需要接收点击
-  // 注意：ignore=true 才是"忽略鼠标=穿透"，无通知时必须为 true，否则整块 500x160 舞台会吃掉点击
+  // 舞台永远点击穿透（点击由输入轮询判定）；仅通知横幅需要接收点击。
+  // 面板打开时必须继续穿透，否则舞台顶部会盖住面板的核心专注区按钮。
   watchEffect(() => {
     if (!dockMode.value) return
-    void invoke('set_click_through', { ignore: !notificationVisible.value })
+    void invoke('set_click_through', { ignore: !notificationVisible.value || panelVisible.value })
   })
 
   // 完全隐藏模式：灵动岛窗口整体隐藏（面板仍可通过快捷键/托盘打开）

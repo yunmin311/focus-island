@@ -183,5 +183,10 @@ export function useSettings() {
   ensureSystemSchemeListener()
   if (!loaded.value) load()
 
-  return { settings, settingsReady: loaded, activeTheme, applyThemeToDOM, applyExternalSettings }
+  function resetSettings() {
+    settings.value = { ...DEFAULT_SETTINGS }
+    applyThemeToDOM()
+  }
+
+  return { settings, settingsReady: loaded, activeTheme, applyThemeToDOM, applyExternalSettings, resetSettings }
 }

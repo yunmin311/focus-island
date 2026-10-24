@@ -2,6 +2,7 @@
 import { computed, ref, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
 import { useUpdater } from '../composables/useUpdater'
+import { useForkUpdate } from '../composables/useForkUpdate'
 import AboutDialog from './AboutDialog.vue'
 
 const emit = defineEmits<{ back: [] }>()
@@ -10,6 +11,15 @@ const emit = defineEmits<{ back: [] }>()
 const SHOW_UPDATER = false
 
 const { settings } = useSettings()
+
+// YM 版更新：只检查自己的 Release，点击后跳转下载
+const {
+  checking: forkChecking,
+  available: forkUpdateAvailable,
+  statusText: forkUpdateStatus,
+  check: checkForkUpdate,
+  openLatest: openLatestRelease,
+} = useForkUpdate()
 
 // 标语编辑：每行一条，清空则恢复内置默认
 const mottoText = computed({
@@ -182,6 +192,9 @@ function unbindRecordListeners() {
 
 onMounted(() => {
   bindRecordListeners()
+  if (settings.value.autoCheckUpdates) {
+    void checkForkUpdate(false)
+  }
 })
 
 onActivated(() => {
@@ -321,6 +334,37 @@ onUnmounted(() => {
         <button type="button" class="update-link-btn" @click="openManualDownload">
           前往 GitHub Release
         </button>
+      </div>
+    </div>
+
+    <!-- 更新（YM 版） -->
+    <div class="settings-section">
+      <div class="section-title">更新（YM 版）</div>
+      <div class="update-copy">
+        <span class="update-label">从我的 Release 检查更新</span>
+        <span class="update-hint">只查询 yunmin311/focus-island，发现新版跳转下载页</span>
+      </div>
+      <div class="update-action-row">
+        <button
+          type="button"
+          class="update-btn"
+          :disabled="forkChecking"
+          @click="checkForkUpdate(true)"
+        >
+          <span v-if="forkChecking" class="mini-spinner"></span>
+          <span>{{ forkChecking ? '检查中...' : '检查更新' }}</span>
+        </button>
+        <button
+          v-if="forkUpdateAvailable"
+          type="button"
+          class="update-btn primary"
+          @click="openLatestRelease"
+        >
+          前往下载
+        </button>
+        <span class="update-status" :class="{ error: Boolean(forkUpdateStatus.startsWith('检查失败')) }">
+          {{ forkUpdateStatus }}
+        </span>
       </div>
     </div>
 

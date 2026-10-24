@@ -1178,6 +1178,166 @@ fn get_macos_update_health<R: Runtime>(_app: AppHandle<R>) -> Option<MacosUpdate
     }
 }
 
+// ==== 系统通知镜像探针（POC）：验证免安装 Win32 应用能否获得读取授权 ====
+
+#[cfg(target_os = "windows")]
+#[derive(serde::Serialize)]
+struct SystemNotificationSample {
+    id: u32,
+    app: String,
+    aumid: String,
+    title: String,
+    body: String,
+    created_ms: i64,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(serde::Serialize)]
+struct SystemNotificationProbe {
+    access: String,
+    total: usize,
+    samples: Vec<SystemNotificationSample>,
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+async fn probe_system_notifications() -> Result<SystemNotificationProbe, String> {
+    tauri::async_runtime::spawn_blocking(probe_system_notifications_blocking)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+async fn probe_system_notifications() -> Result<serde_json::Value, String> {
+    Err("仅支持 Windows".into())
+}
+
+#[cfg(target_os = "windows")]
+fn probe_system_notifications_blocking() -> Result<SystemNotificationProbe, String> {
+    use windows::UI::Notifications::Management::{
+        UserNotificationListener, UserNotificationListenerAccessStatus,
+    };
+    use windows::UI::Notifications::NotificationKinds;
+
+    unsafe {
+        let _ = windows::Win32::System::Com::CoInitializeEx(
+            None,
+            windows::Win32::System::Com::COINIT_MULTITHREADED,
+        );
+    }
+
+    let listener = UserNotificationListener::Current().map_err(|e| e.to_string())?;
+    let status = listener
+        .RequestAccessAsync()
+        .and_then(|op| op.get())
+        .map_err(|e| e.to_string())?;
+
+    let allowed = status == UserNotificationListenerAccessStatus::Allowed;
+    let access = if allowed {
+        "allowed"
+    } else if status == UserNotificationListenerAccessStatus::Denied {
+        "denied"
+    } else {
+        "unspecified"
+    }
+    .to_string();
+
+    let mut samples = Vec::new();
+    let mut total = 0usize;
+    if allowed {
+        let items = listener
+            .GetNotificationsAsync(NotificationKinds::Toast)
+            .and_then(|op| op.get())
+            .map_err(|e| e.to_string())?;
+        total = items.Size().unwrap_or(0) as usize;
+        for i in 0..total.min(5) {
+            if let Ok(n) = items.GetAt(i as u32) {
+                samples.push(read_system_notification(&n));
+            }
+        }
+    }
+
+    Ok(SystemNotificationProbe {
+        access,
+        total,
+        samples,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn read_system_notification(
+    n: &windows::UI::Notifications::UserNotification,
+) -> SystemNotificationSample {
+    use windows::UI::Notifications::KnownNotificationBindings;
+
+    let mut app = String::new();
+    let mut aumid = String::new();
+    if let Ok(info) = n.AppInfo() {
+        if let Ok(display) = info.DisplayInfo() {
+            app = display.DisplayName().map(|s| s.to_string()).unwrap_or_default();
+        }
+        aumid = info.AppUserModelId().map(|s| s.to_string()).unwrap_or_default();
+    }
+
+    let mut title = String::new();
+    let mut body = String::new();
+    if let Ok(notification) = n.Notification() {
+        if let Ok(visual) = notification.Visual() {
+            if let Ok(generic) = KnownNotificationBindings::ToastGeneric() {
+                if let Ok(binding) = visual.GetBinding(&generic) {
+                    if let Ok(texts) = binding.GetTextElements() {
+                        let count = texts.Size().unwrap_or(0);
+                        if let Ok(t) = texts.GetAt(0) {
+                            title = t.Text().map(|s| s.to_string()).unwrap_or_default();
+                        }
+                        if count > 1 {
+                            if let Ok(t) = texts.GetAt(1) {
+                                body = t.Text().map(|s| s.to_string()).unwrap_or_default();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let created_ms = n
+        .CreationTime()
+        .map(|dt| (dt.UniversalTime / 10_000) - 11_644_473_600_000)
+        .unwrap_or(0);
+
+    SystemNotificationSample {
+        id: n.Id().unwrap_or(0),
+        app,
+        aumid,
+        title,
+        body,
+        created_ms,
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod system_notification_probe_tests {
+    #[test]
+    fn probe_system_notifications_works() {
+        match super::probe_system_notifications_blocking() {
+            Ok(p) => {
+                println!(
+                    "access={} total={} samples={}",
+                    p.access,
+                    p.total,
+                    p.samples.len()
+                );
+                for s in &p.samples {
+                    println!("  [{}] {} | {} | {}", s.aumid, s.app, s.title, s.body);
+                }
+            }
+            Err(e) => println!("probe error: {e}"),
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1233,6 +1393,7 @@ pub fn run() {
             get_volume_state,
             set_system_volume,
             set_system_mute,
+            probe_system_notifications,
         ])
         .setup(|app| {
             #[cfg(desktop)]

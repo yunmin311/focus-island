@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
 import { useUpdater } from '../composables/useUpdater'
 import AboutDialog from './AboutDialog.vue'
@@ -10,6 +11,33 @@ const emit = defineEmits<{ back: [] }>()
 const SHOW_UPDATER = false
 
 const { settings } = useSettings()
+
+// 系统通知镜像探针（POC）：只验证授权和读取能力
+const sysNotifProbe = ref<string | null>(null)
+const sysNotifBusy = ref(false)
+
+async function runSystemNotifProbe() {
+  sysNotifBusy.value = true
+  sysNotifProbe.value = null
+  try {
+    const r = await invoke<{
+      access: string
+      total: number
+      samples: Array<{ app: string; aumid: string; title: string; body: string }>
+    }>('probe_system_notifications')
+    const accessText =
+      r.access === 'allowed' ? '已授权' : r.access === 'denied' ? '被拒绝（需在系统设置里允许）' : '未授权/不适用'
+    const lines = [`授权：${accessText} · 通知中心 ${r.total} 条`]
+    for (const s of r.samples) {
+      lines.push(`${s.app || s.aumid}｜${s.title}${s.body ? ' — ' + s.body : ''}`)
+    }
+    sysNotifProbe.value = lines.join('\n')
+  } catch (e) {
+    sysNotifProbe.value = typeof e === 'string' ? e : '检测失败'
+  } finally {
+    sysNotifBusy.value = false
+  }
+}
 
 // 标语编辑：每行一条，清空则恢复内置默认
 const mottoText = computed({
@@ -438,6 +466,19 @@ onUnmounted(() => {
           <span v-if="settings.activeThemeId === theme.id" class="theme-check">✓</span>
         </button>
       </div>
+    </div>
+
+    <!-- 系统通知（POC） -->
+    <div class="settings-section">
+      <div class="section-title">系统通知（实验）</div>
+      <div class="update-copy">
+        <span class="update-label">读取系统通知中心</span>
+        <span class="update-hint">验证 Windows 通知读取授权，仅本机测试用，不会依赖它</span>
+      </div>
+      <button class="update-btn" :disabled="sysNotifBusy" @click="runSystemNotifProbe">
+        {{ sysNotifBusy ? '检测中…' : '检测授权' }}
+      </button>
+      <pre v-if="sysNotifProbe" class="probe-output">{{ sysNotifProbe }}</pre>
     </div>
   </div>
 
@@ -1005,5 +1046,17 @@ onUnmounted(() => {
   font-size: 10px;
   opacity: 0.55;
   margin-top: 4px;
+}
+.probe-output {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 10px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
 }
 </style>

@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
-import { useTasks, getTaskTimeCategory } from '../composables/useTasks'
+import { useTasks, getTaskTimeCategory, todayString } from '../composables/useTasks'
 import BackButton from './BackButton.vue'
 
 type TimeRange = 'today' | 'week' | 'month' | 'all'
@@ -109,7 +109,7 @@ const selectedDateLabel = computed(() => {
 
 const isSelectedFuture = computed(() => {
   if (!selectedDate.value) return false
-  return selectedDate.value > getDateString()
+  return selectedDate.value > todayString.value
 })
 
 const selectedCompletedTitles = computed(() => selectedStat.value?.completedTitles ?? [])

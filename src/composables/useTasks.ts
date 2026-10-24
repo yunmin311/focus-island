@@ -19,11 +19,18 @@ function parseDateStr(s: string): Date {
   return new Date(y, m - 1, d)
 }
 
-function startOfToday(): Date {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
+// 当前日期字符串（跨天自动刷新，供“今天”分组与每日任务打卡状态使用）
+export const todayString = ref(toDateStr(new Date()))
+
+let todayTicker: ReturnType<typeof setInterval> | null = null
+function ensureTodayTicker() {
+  if (todayTicker !== null) return
+  todayTicker = setInterval(() => {
+    const next = toDateStr(new Date())
+    if (next !== todayString.value) todayString.value = next
+  }, 30_000)
 }
+ensureTodayTicker()
 
 // --- Types ---
 
@@ -69,12 +76,11 @@ interface TaskBuckets {
   groups: Map<string, Task[]>
 }
 
-export function getTaskTimeCategory(task: Task): TimeCategory {
+export function getTaskTimeCategory(task: Task, today = todayString.value): TimeCategory {
   if (task.repeat === 'daily') return 'today'
   if (!task.dueDate) return 'nodate'
-  const today = startOfToday()
   const due = parseDateStr(task.dueDate)
-  const diff = Math.floor((due.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+  const diff = Math.floor((due.getTime() - parseDateStr(today).getTime()) / (24 * 60 * 60 * 1000))
   if (diff < 0) return 'overdue'
   if (diff === 0) return 'today'
   if (diff === 1) return 'tomorrow'

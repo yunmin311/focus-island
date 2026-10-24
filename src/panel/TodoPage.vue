@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
-import { useTasks, getTaskTimeCategory, isTaskDoneOnDate, type Task } from '../composables/useTasks'
+import { useTasks, getTaskTimeCategory, isTaskDoneOnDate, todayString, type Task } from '../composables/useTasks'
 import { useTaskGroups } from '../composables/useTaskGroups'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { getCategoryColor } from '../composables/useMemos'
@@ -324,7 +324,7 @@ function handleStartTask(task: Task) {
   }
 }
 
-const todayStr = computed(() => formatDateStr(new Date()))
+const todayStr = todayString
 
 function isDoneToday(task: Task): boolean {
   return isTaskDoneOnDate(task, todayStr.value)

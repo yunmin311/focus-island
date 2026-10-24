@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useTasks, isTaskDoneOnDate, type Task } from '../composables/useTasks'
+import { useTasks, isTaskDoneOnDate, todayString, type Task } from '../composables/useTasks'
 import { useTaskGroups } from '../composables/useTaskGroups'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { getCategoryColor } from '../composables/useMemos'
@@ -42,10 +42,7 @@ const showRepeatMenu = ref(false)
 const showDeleteConfirm = ref(false)
 const newSubtaskTitle = ref('')
 
-const todayStr = computed(() => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-})
+const todayStr = todayString
 
 // --- Computed ---
 const task = computed<Task | undefined>(() => tasks.value.find(t => t.id === props.taskId))

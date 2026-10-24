@@ -9,7 +9,7 @@ const emit = defineEmits<{ close: [] }>()
 const appName = ref('专注岛')
 const appVersion = ref('')
 
-// 定制版：指向自己的 fork，并标注原版来源
+// YM 版：指向自己的 fork，并标注原版来源
 const githubUrl = 'https://github.com/yunmin311/focus-island'
 const upstreamUrl = 'https://github.com/ipfred/focus-island'
 
@@ -22,7 +22,7 @@ const forkChanges = [
   '已禁用应用内更新（防止被官方版覆盖）',
 ]
 
-const versionLabel = computed(() => (appVersion.value ? `v${appVersion.value} · 定制版` : '定制版'))
+const versionLabel = computed(() => (appVersion.value ? `v${appVersion.value} · YM 版` : 'YM 版'))
 
 onMounted(async () => {
   try {

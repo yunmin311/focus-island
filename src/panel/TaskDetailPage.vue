@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useTasks, type Task } from '../composables/useTasks'
+import { useTasks, isTaskDoneOnDate, type Task } from '../composables/useTasks'
 import { useTaskGroups } from '../composables/useTaskGroups'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { getCategoryColor } from '../composables/useMemos'
@@ -12,6 +12,7 @@ const emit = defineEmits<{ back: [] }>()
 const {
   tasks,
   updateTask,
+  setTaskRepeat,
   deleteTask,
   toggleComplete,
   addSubtask,
@@ -37,8 +38,14 @@ const editingTitle = ref(false)
 const titleInput = ref('')
 const showDatePicker = ref(false)
 const showGroupDropdown = ref(false)
+const showRepeatMenu = ref(false)
 const showDeleteConfirm = ref(false)
 const newSubtaskTitle = ref('')
+
+const todayStr = computed(() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
 
 // --- Computed ---
 const task = computed<Task | undefined>(() => tasks.value.find(t => t.id === props.taskId))
@@ -91,6 +98,18 @@ function selectGroup(groupId: string | null) {
   if (!task.value) return
   updateTask(task.value.id, { groupId })
   showGroupDropdown.value = false
+}
+
+// --- Repeat ---
+function selectRepeat(repeat: 'daily' | null) {
+  if (!task.value) return
+  setTaskRepeat(task.value.id, repeat, task.value.repeatTime ?? null)
+  showRepeatMenu.value = false
+}
+
+function onRepeatTimeChange(e: Event) {
+  if (!task.value) return
+  updateTask(task.value.id, { repeatTime: (e.target as HTMLInputElement).value || null })
 }
 
 // --- Notes ---
@@ -148,12 +167,15 @@ function cancelDelete() {
 function onClickOutside() {
   showDatePicker.value = false
   showGroupDropdown.value = false
+  showRepeatMenu.value = false
 }
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if (showDeleteConfirm.value) {
       showDeleteConfirm.value = false
+    } else if (showRepeatMenu.value) {
+      showRepeatMenu.value = false
     } else if (showDatePicker.value) {
       showDatePicker.value = false
     } else if (showGroupDropdown.value) {
@@ -207,10 +229,10 @@ onBeforeUnmount(() => {
       <div class="title-row">
         <button
           class="task-checkbox"
-          :class="{ checked: task!.completed }"
+          :class="{ checked: isTaskDoneOnDate(task!, todayStr) }"
           @click="toggleComplete(task!.id)"
         >
-          <svg v-if="task!.completed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+          <svg v-if="isTaskDoneOnDate(task!, todayStr)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
         </button>
 
         <div v-if="editingTitle" class="title-edit-wrapper" @click.stop>
@@ -224,7 +246,7 @@ onBeforeUnmount(() => {
           />
         </div>
         <div v-else class="title-display" @click="startEditTitle">
-          <span class="title-text" :class="{ 'line-through': task!.completed }">{{ task!.title }}</span>
+          <span class="title-text" :class="{ 'line-through': isTaskDoneOnDate(task!, todayStr) }">{{ task!.title }}</span>
           <svg class="edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
@@ -252,10 +274,10 @@ onBeforeUnmount(() => {
       <!-- Properties -->
       <div class="prop-section">
         <!-- Due date -->
-        <div class="prop-row" @click.stop>
+        <div v-if="task!.repeat !== 'daily'" class="prop-row" @click.stop>
           <span class="prop-label">到期日</span>
           <div class="prop-value-wrapper">
-            <button class="prop-value-btn date-btn" :class="{ active: showDatePicker }" @click.stop="showDatePicker = !showDatePicker; showGroupDropdown = false">
+            <button class="prop-value-btn date-btn" :class="{ active: showDatePicker }" @click.stop="showDatePicker = !showDatePicker; showGroupDropdown = false; showRepeatMenu = false">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
@@ -273,11 +295,43 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <!-- Repeat -->
+        <div class="prop-row" @click.stop>
+          <span class="prop-label">重复</span>
+          <div class="prop-value-wrapper">
+            <button class="prop-value-btn repeat-btn" :class="{ active: showRepeatMenu, on: task!.repeat === 'daily' }" @click.stop="showRepeatMenu = !showRepeatMenu; showDatePicker = false; showGroupDropdown = false">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+              </svg>
+              <span>{{ task!.repeat === 'daily' ? `每天${task!.repeatTime ? ' ' + task!.repeatTime : ''}` : '不重复' }}</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div v-if="showRepeatMenu" class="dropdown-menu repeat-menu" @click.stop>
+              <button class="dropdown-item" :class="{ active: task!.repeat !== 'daily' }" @click="selectRepeat(null)">
+                不重复
+              </button>
+              <button class="dropdown-item" :class="{ active: task!.repeat === 'daily' }" @click="selectRepeat('daily')">
+                每天
+              </button>
+              <div v-if="task!.repeat === 'daily'" class="repeat-time-row">
+                <span class="repeat-time-label">定时</span>
+                <input
+                  type="time"
+                  class="repeat-time-input"
+                  :value="task!.repeatTime ?? ''"
+                  @change="onRepeatTimeChange"
+                  @click.stop
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Group -->
         <div class="prop-row" @click.stop>
           <span class="prop-label">分组</span>
           <div class="prop-value-wrapper">
-            <button class="prop-value-btn group-btn" :class="{ active: showGroupDropdown }" @click.stop="showGroupDropdown = !showGroupDropdown; showDatePicker = false">
+            <button class="prop-value-btn group-btn" :class="{ active: showGroupDropdown }" @click.stop="showGroupDropdown = !showGroupDropdown; showDatePicker = false; showRepeatMenu = false">
               <span
                 v-if="task!.groupId && groups.find(g => g.id === task!.groupId)"
                 class="group-dot"
@@ -786,6 +840,41 @@ onBeforeUnmount(() => {
 .dropdown-item.active {
   background: color-mix(in srgb, var(--focus-color) 15%, transparent);
   color: var(--focus-color);
+}
+
+.repeat-btn.on {
+  background: color-mix(in srgb, var(--focus-color) 10%, transparent);
+  border-color: color-mix(in srgb, var(--focus-color) 25%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 75%, #fff);
+}
+
+.repeat-time-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 2px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.repeat-time-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.repeat-time-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.85);
+  color-scheme: dark;
+  outline: none;
 }
 
 /* Notes section */

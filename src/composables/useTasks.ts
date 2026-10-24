@@ -36,6 +36,7 @@ export interface Subtask {
 
 export type TaskPriority = 0 | 1 | 2 | 3
 export type TimeCategory = 'overdue' | 'today' | 'tomorrow' | 'week' | 'later' | 'nodate'
+export type TaskRepeat = 'daily'
 
 export interface Task {
   id: string
@@ -50,6 +51,9 @@ export interface Task {
   createdAt: number
   updatedAt: number
   lastActiveAt: number
+  repeat?: TaskRepeat | null
+  repeatTime?: string | null
+  completionDates?: string[]
 }
 
 interface TaskBuckets {
@@ -66,6 +70,7 @@ interface TaskBuckets {
 }
 
 export function getTaskTimeCategory(task: Task): TimeCategory {
+  if (task.repeat === 'daily') return 'today'
   if (!task.dueDate) return 'nodate'
   const today = startOfToday()
   const due = parseDateStr(task.dueDate)
@@ -75,6 +80,18 @@ export function getTaskTimeCategory(task: Task): TimeCategory {
   if (diff === 1) return 'tomorrow'
   if (diff <= 6) return 'week'
   return 'later'
+}
+
+// 每日重复任务：完成状态按“今天是否已打卡”计算
+export function isTaskDoneOnDate(task: Task, date: string): boolean {
+  if (task.repeat === 'daily') {
+    return (task.completionDates ?? []).includes(date)
+  }
+  return task.completed
+}
+
+export function isRecurringTask(task: Task): boolean {
+  return task.repeat === 'daily'
 }
 
 // --- State ---
@@ -111,6 +128,9 @@ async function load() {
         dueDate: t.dueDate ?? toDateStr(new Date()),
         priority: t.completed ? 0 : ((t.priority ?? 0) as TaskPriority),
         subtasks: t.subtasks ?? [],
+        repeat: t.repeat ?? null,
+        repeatTime: t.repeatTime ?? null,
+        completionDates: t.completionDates ?? [],
         ...t,
         lastActiveAt: t.lastActiveAt ?? 0,
       } as Task
@@ -164,16 +184,23 @@ listen<string>('tasks-updated', (event) => {
 
 export function useTasks() {
   ensureLoaded()
-  const { recordTaskCompleted } = useDailyStats()
+  const { recordTaskCompleted, todayStat } = useDailyStats()
 
-  function addTask(title: string, dueDate?: string | null, groupId?: string | null, priority?: TaskPriority) {
+  function addTask(
+    title: string,
+    dueDate?: string | null,
+    groupId?: string | null,
+    priority?: TaskPriority,
+    repeat?: TaskRepeat | null,
+    repeatTime?: string | null
+  ) {
     const now = Date.now()
     const task: Task = {
       id: crypto.randomUUID(),
       title: title.trim(),
       note: '',
       groupId: groupId ?? null,
-      dueDate: dueDate ?? toDateStr(new Date()),
+      dueDate: repeat === 'daily' ? toDateStr(new Date()) : (dueDate ?? toDateStr(new Date())),
       completed: false,
       pomodoroCount: 0,
       priority: priority ?? 0,
@@ -181,13 +208,16 @@ export function useTasks() {
       createdAt: now,
       updatedAt: now,
       lastActiveAt: 0,
+      repeat: repeat ?? null,
+      repeatTime: repeatTime || null,
+      completionDates: [],
     }
 
     tasks.value.unshift(task)
     return task
   }
 
-  function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'note' | 'groupId' | 'dueDate' | 'completed' | 'priority'>>) {
+  function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'note' | 'groupId' | 'dueDate' | 'completed' | 'priority' | 'repeat' | 'repeatTime'>>) {
     const task = tasks.value.find(t => t.id === id)
     if (!task) return
 
@@ -198,7 +228,25 @@ export function useTasks() {
       task.priority = 0
     }
     if (!wasCompleted && task.completed) {
-      recordTaskCompleted()
+      recordTaskCompleted(task.title)
+    }
+
+    task.updatedAt = Date.now()
+  }
+
+  // 切换/取消每日重复
+  function setTaskRepeat(id: string, repeat: TaskRepeat | null, repeatTime?: string | null) {
+    const task = tasks.value.find(t => t.id === id)
+    if (!task) return
+
+    task.repeat = repeat
+    task.repeatTime = repeatTime || null
+    task.completionDates = task.completionDates ?? []
+
+    if (repeat === 'daily') {
+      task.completed = false
+      task.priority = 0
+      task.dueDate = toDateStr(new Date())
     }
 
     task.updatedAt = Date.now()
@@ -220,6 +268,21 @@ export function useTasks() {
     const task = tasks.value.find(t => t.id === id)
     if (!task) return
 
+    // 每日重复任务：勾选记录当天完成，取消勾选撤销当天记录
+    if (task.repeat === 'daily') {
+      const today = toDateStr(new Date())
+      const dates = task.completionDates ?? (task.completionDates = [])
+      const idx = dates.indexOf(today)
+      if (idx >= 0) {
+        dates.splice(idx, 1)
+      } else {
+        dates.push(today)
+        recordTaskCompleted(task.title)
+      }
+      task.updatedAt = Date.now()
+      return
+    }
+
     const wasCompleted = task.completed
     task.completed = !task.completed
     if (task.completed) {
@@ -228,7 +291,7 @@ export function useTasks() {
       task.priority = 1 as TaskPriority
     }
     if (!wasCompleted && task.completed) {
-      recordTaskCompleted()
+      recordTaskCompleted(task.title)
     }
     task.updatedAt = Date.now()
   }
@@ -304,6 +367,24 @@ export function useTasks() {
     }
 
     for (const task of tasks.value) {
+      // 每日重复任务始终归入“今天”，不受完成状态/到期日影响
+      if (task.repeat === 'daily') {
+        buckets.active.push(task)
+        if (task.lastActiveAt > 0) {
+          buckets.recentFocus.push(task)
+        }
+        if (task.groupId) {
+          const groupTasks = buckets.groups.get(task.groupId)
+          if (groupTasks) {
+            groupTasks.push(task)
+          } else {
+            buckets.groups.set(task.groupId, [task])
+          }
+        }
+        buckets.today.push(task)
+        continue
+      }
+
       if (task.completed) {
         buckets.completed.push(task)
         continue
@@ -363,13 +444,9 @@ export function useTasks() {
 
   const todayStats = computed(() => {
     const { settings } = useSettings()
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    const ts = todayStart.getTime()
-    const todayDone = tasks.value.filter(t => t.updatedAt >= ts && t.completed)
     const totalPomodoros = tasks.value.reduce((sum, t) => sum + t.pomodoroCount, 0)
     const focusMinutes = totalPomodoros * settings.value.focusDuration
-    return { totalPomodoros, focusMinutes, completedToday: todayDone.length }
+    return { totalPomodoros, focusMinutes, completedToday: todayStat.value.tasksCompleted }
   })
 
   return {
@@ -386,6 +463,7 @@ export function useTasks() {
     todayStats,
     addTask,
     updateTask,
+    setTaskRepeat,
     setTaskPriority,
     deleteTask,
     toggleComplete,

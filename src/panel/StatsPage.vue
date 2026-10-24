@@ -9,12 +9,14 @@ type TimeRange = 'today' | 'week' | 'month' | 'all'
 
 const emit = defineEmits<{ back: [] }>()
 
-const { todayStat, weekStats, monthStats, allTimeStats, summarizeStats, getDateString, getMonthStats } = useDailyStats()
+const { todayStat, weekStats, monthStats, allTimeStats, summarizeStats, getDateString, getMonthStats, dailyStats } = useDailyStats()
 const { starAchievements, streakAchievements, specialAchievements, state } = useAchievements()
 const { tasks } = useTasks()
 
 const timeRange = ref<TimeRange>('today')
 const currentMonth = ref(new Date())
+const heatExpanded = ref(false)
+const selectedDate = ref<string | null>(getDateString())
 
 const timeRangeOptions: { value: TimeRange; label: string }[] = [
   { value: 'today', label: '今日' },
@@ -70,12 +72,12 @@ const calendarDays = computed(() => {
   const startPadding = firstDay.getDay()
   const daysInMonth = lastDay.getDate()
 
-  const days: { date: string; day: number; intensity: number; pomodoros: number }[] = []
+  const days: { date: string; day: number; intensity: number; pomodoros: number; tasks: number }[] = []
 
   const monthStatsMap = new Map(selectedMonthStats.value.map(s => [s.date, s]))
 
   for (let i = 0; i < startPadding; i++) {
-    days.push({ date: '', day: 0, intensity: 0, pomodoros: 0 })
+    days.push({ date: '', day: 0, intensity: 0, pomodoros: 0, tasks: 0 })
   }
 
   for (let d = 1; d <= daysInMonth; d++) {
@@ -86,11 +88,63 @@ const calendarDays = computed(() => {
     if (pomodoros >= 5) intensity = 3
     else if (pomodoros >= 3) intensity = 2
     else if (pomodoros >= 1) intensity = 1
-    days.push({ date: dateStr, day: d, intensity, pomodoros })
+    days.push({ date: dateStr, day: d, intensity, pomodoros, tasks: stat?.tasksCompleted ?? 0 })
   }
 
   return days
 })
+
+// --- Day detail ---
+const allStatsMap = computed(() => new Map(dailyStats.value.map(s => [s.date, s])))
+
+const selectedStat = computed(() => (selectedDate.value ? allStatsMap.value.get(selectedDate.value) : undefined))
+
+const selectedDateLabel = computed(() => {
+  if (!selectedDate.value) return ''
+  const [y, m, d] = selectedDate.value.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()]
+  return `${m}月${d}日 ${wd}`
+})
+
+const isSelectedFuture = computed(() => {
+  if (!selectedDate.value) return false
+  return selectedDate.value > getDateString()
+})
+
+const selectedCompletedTitles = computed(() => selectedStat.value?.completedTitles ?? [])
+
+const dailyTasks = computed(() => tasks.value.filter(t => t.repeat === 'daily'))
+
+const selectedScheduledTasks = computed(() => {
+  const date = selectedDate.value
+  if (!date) return []
+  return [...dailyTasks.value]
+    .sort((a, b) => (a.repeatTime ?? '99:99').localeCompare(b.repeatTime ?? '99:99'))
+    .map(t => ({
+      id: t.id,
+      title: t.title,
+      time: t.repeatTime ?? '',
+      done: (t.completionDates ?? []).includes(date),
+    }))
+})
+
+const monthDailyTasks = computed(() => {
+  const ym = `${currentMonth.value.getFullYear()}-${String(currentMonth.value.getMonth() + 1).padStart(2, '0')}`
+  return dailyTasks.value
+    .map(t => ({
+      id: t.id,
+      title: t.title,
+      time: t.repeatTime ?? '',
+      done: (t.completionDates ?? []).filter(d => d.startsWith(ym)).length,
+    }))
+    .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'))
+})
+
+function selectDay(day: { date: string; day: number }) {
+  if (!day.day) return
+  selectedDate.value = selectedDate.value === day.date ? null : day.date
+}
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -171,35 +225,113 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
     <div class="section">
       <div class="section-header">
         <span class="section-title">专注热力图 · {{ monthYear }}</span>
-        <div class="month-nav">
-          <button class="nav-btn" @click="prevMonth">&lt;</button>
-          <button class="nav-btn" @click="nextMonth">&gt;</button>
+        <div class="heat-actions">
+          <button class="expand-btn" :class="{ active: heatExpanded }" @click="heatExpanded = !heatExpanded">
+            {{ heatExpanded ? '收起' : '展开明细' }}
+          </button>
+          <div class="month-nav">
+            <button class="nav-btn" @click="prevMonth">&lt;</button>
+            <button class="nav-btn" @click="nextMonth">&gt;</button>
+          </div>
         </div>
       </div>
       <div class="heatmap">
         <div class="heatmap-weekdays">
           <span v-for="d in weekDays" :key="d" class="weekday">{{ d }}</span>
         </div>
-        <div class="heatmap-grid">
+        <div class="heatmap-grid" :class="{ detailed: heatExpanded }">
           <div
             v-for="(day, i) in calendarDays"
             :key="i"
-            :class="['heat-cell', `intensity-${day.intensity}`, { empty: !day.day }]"
+            :class="['heat-cell', `intensity-${day.intensity}`, { empty: !day.day, selected: selectedDate === day.date }]"
+            @click="selectDay(day)"
             @mouseenter="hoveredIndex = day.day ? i : null"
             @mouseleave="hoveredIndex = null"
           >
             <span v-if="day.day" class="day-number">{{ day.day }}</span>
-            <div v-if="hoveredIndex === i && day.pomodoros > 0" class="cell-tooltip">
-              {{ day.pomodoros }}🍅
+            <span v-if="heatExpanded && day.day && (day.pomodoros > 0 || day.tasks > 0)" class="cell-count">
+              <span v-if="day.pomodoros > 0">{{ day.pomodoros }}🍅</span>
+              <span v-if="day.tasks > 0" class="cell-task-count">{{ day.tasks }}✓</span>
+            </span>
+            <div v-if="hoveredIndex === i && (day.pomodoros > 0 || day.tasks > 0)" class="cell-tooltip">
+              {{ day.pomodoros }}🍅<template v-if="day.tasks > 0"> · {{ day.tasks }}✓</template>
             </div>
           </div>
         </div>
       </div>
       <div class="heatmap-legend">
+        <span class="legend-hint">点击日期查看明细</span>
         <span class="legend-item"><span class="legend-box intensity-0"></span>无</span>
         <span class="legend-item"><span class="legend-box intensity-1"></span>1-2</span>
         <span class="legend-item"><span class="legend-box intensity-2"></span>3-5</span>
         <span class="legend-item"><span class="legend-box intensity-3"></span>5+</span>
+      </div>
+
+      <!-- Selected day detail -->
+      <div v-if="selectedDate" class="day-detail">
+        <div class="day-detail-header">
+          <span class="day-detail-title">{{ selectedDateLabel }}</span>
+          <button class="day-detail-close" @click="selectedDate = null" title="收起">×</button>
+        </div>
+        <div class="day-detail-metrics">
+          <div class="mini-metric">
+            <span class="mini-value">{{ selectedStat?.pomodoros ?? 0 }}</span>
+            <span class="mini-label">番茄</span>
+          </div>
+          <div class="mini-metric">
+            <span class="mini-value">{{ formatDuration(selectedStat?.focusMinutes ?? 0) }}</span>
+            <span class="mini-label">专注</span>
+          </div>
+          <div class="mini-metric">
+            <span class="mini-value">{{ selectedStat?.tasksCompleted ?? 0 }}</span>
+            <span class="mini-label">完成任务</span>
+          </div>
+        </div>
+
+        <div class="day-detail-group">
+          <div class="day-detail-group-title">完成的任务</div>
+          <div v-if="selectedCompletedTitles.length === 0" class="day-empty">
+            {{ (selectedStat?.tasksCompleted ?? 0) > 0 ? `完成 ${selectedStat?.tasksCompleted} 个任务（无标题记录）` : '当日没有完成记录' }}
+          </div>
+          <div v-else class="day-task-list">
+            <div v-for="(title, i) in selectedCompletedTitles" :key="i" class="day-task-row done">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="day-task-title">{{ title }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="day-detail-group">
+          <div class="day-detail-group-title">每日定时任务</div>
+          <div v-if="selectedScheduledTasks.length === 0" class="day-empty">暂无每日任务</div>
+          <div v-else class="day-task-list">
+            <div
+              v-for="t in selectedScheduledTasks"
+              :key="t.id"
+              class="day-task-row"
+              :class="{ done: t.done, planned: !t.done && isSelectedFuture }"
+            >
+              <span class="day-task-time">{{ t.time || '全天' }}</span>
+              <span class="day-task-title">{{ t.title }}</span>
+              <span class="day-task-state">{{ t.done ? '完成' : (isSelectedFuture ? '计划' : '未完成') }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily recurring tasks -->
+    <div v-if="monthDailyTasks.length > 0" class="section">
+      <div class="section-header">
+        <span class="section-title">每日定时任务</span>
+        <span class="section-hint">{{ monthYear }}</span>
+      </div>
+      <div class="daily-task-list">
+        <div v-for="t in monthDailyTasks" :key="t.id" class="daily-task-row">
+          <span class="daily-task-time">{{ t.time || '全天' }}</span>
+          <span class="daily-task-title">{{ t.title }}</span>
+          <span class="daily-task-count">本月 {{ t.done }} 天</span>
+        </div>
       </div>
     </div>
 
@@ -533,6 +665,267 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   white-space: nowrap;
   z-index: 10;
   pointer-events: none;
+}
+
+.heat-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expand-btn {
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.expand-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.expand-btn.active {
+  background: color-mix(in srgb, var(--focus-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--focus-color) 28%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 80%, #fff);
+}
+
+.section-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.heat-cell {
+  cursor: pointer;
+}
+
+.heat-cell.empty {
+  cursor: default;
+}
+
+.heat-cell.selected {
+  outline: 1.5px solid color-mix(in srgb, var(--focus-color) 75%, transparent);
+  outline-offset: 1px;
+}
+
+.heatmap-grid.detailed .heat-cell {
+  aspect-ratio: 1.25;
+}
+
+.cell-count {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 8px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+.heat-cell.intensity-3 .cell-count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cell-task-count {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.legend-hint {
+  margin-right: auto;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* Selected day detail */
+.day-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.day-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.day-detail-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.day-detail-close {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.day-detail-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.day-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mini-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mini-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.mini-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.day-detail-group-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 5px;
+}
+
+.day-empty {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.28);
+  padding: 2px 0 4px;
+}
+
+.day-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.day-task-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.day-task-row.done {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.day-task-row.done svg {
+  color: var(--focus-color);
+  flex-shrink: 0;
+}
+
+.day-task-time {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+  min-width: 28px;
+}
+
+.day-task-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-task-state {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.day-task-row.done .day-task-state {
+  color: color-mix(in srgb, var(--focus-color) 80%, #fff);
+}
+
+.day-task-row.planned .day-task-state {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* Daily recurring tasks list */
+.daily-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.daily-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.daily-task-time {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--focus-color) 70%, #fff);
+  background: color-mix(in srgb, var(--focus-color) 8%, transparent);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.daily-task-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily-task-count {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
 }
 
 .heatmap-legend {

@@ -1,11 +1,14 @@
 import { ref, watch, computed } from 'vue'
 import { readTextFile, writeTextFile, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs'
+import { emitTo, listen } from '@tauri-apps/api/event'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 
 export interface DailyStat {
   date: string        // "2026-04-18"
   pomodoros: number   // 当日番茄数
   focusMinutes: number // 当日专注分钟
   tasksCompleted: number // 当日完成任务数
+  completedTitles?: string[] // 当日完成的任务标题（用于统计明细）
 }
 
 const STATS_FILE = 'focus-island/daily-stats.json'
@@ -15,7 +18,10 @@ const loaded = ref(false)
 let loadPromise: Promise<void> | null = null
 
 function getDateString(date: Date = new Date()): string {
-  return date.toISOString().split('T')[0]
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function getStatByDate(date: string): DailyStat | undefined {
@@ -40,16 +46,33 @@ function ensureLoaded() {
 }
 
 async function save() {
-  if (!loaded.value) return
+  if (!loaded.value || isSyncing) return
   try {
     await mkdir('focus-island', { baseDir: BaseDirectory.AppData, recursive: true })
-    await writeTextFile(STATS_FILE, JSON.stringify(dailyStats.value), { baseDir: BaseDirectory.AppData })
+    const json = JSON.stringify(dailyStats.value)
+    await writeTextFile(STATS_FILE, json, { baseDir: BaseDirectory.AppData })
+    // 同步到另一个窗口（岛 / 面板）
+    const self = getCurrentWebviewWindow().label
+    const targets = self === 'main' ? ['panel'] : ['main']
+    for (const target of targets) {
+      emitTo(target, 'daily-stats-updated', json).catch(() => {})
+    }
   } catch (e) {
     console.error('Failed to save daily stats', e)
   }
 }
 
+let isSyncing = false
+
 watch(dailyStats, save, { deep: true })
+
+listen<string>('daily-stats-updated', (event) => {
+  try {
+    isSyncing = true
+    dailyStats.value = JSON.parse(event.payload)
+    setTimeout(() => { isSyncing = false }, 50)
+  } catch { /* ignore */ }
+})
 
 export function useDailyStats() {
   ensureLoaded()
@@ -65,14 +88,18 @@ export function useDailyStats() {
     stat.focusMinutes += focusMinutes
   }
 
-  function recordTaskCompleted() {
+  function recordTaskCompleted(title?: string) {
     const today = getDateString()
     let stat = getStatByDate(today)
     if (!stat) {
-      stat = { date: today, pomodoros: 0, focusMinutes: 0, tasksCompleted: 0 }
+      stat = { date: today, pomodoros: 0, focusMinutes: 0, tasksCompleted: 0, completedTitles: [] }
       dailyStats.value.push(stat)
     }
     stat.tasksCompleted++
+    if (title) {
+      if (!stat.completedTitles) stat.completedTitles = []
+      stat.completedTitles.push(title)
+    }
   }
 
   function getStatsInRange(startDate: Date, endDate: Date): DailyStat[] {

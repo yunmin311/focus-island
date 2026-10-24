@@ -4,9 +4,59 @@ import { useRadio, CATEGORY_LABELS, type StationCategory, type RadioStation } fr
 
 const {
   stations, currentStation, playing, loading, error, volume,
+  currentTime, duration, seekable, progress, seekTo,
   toggle, switchStation, setVolume,
   importFromUrl, importFromFile, removeCustomStation, renameCustomStation,
 } = useRadio()
+
+const isLocalMedia = computed(() => {
+  const station = currentStation.value
+  if (!station) return false
+  return station.streamUrl === '__LOCAL__'
+    || station.streamUrl === '__RESOLVE__'
+    || /\.(mp3|m4a|aac|ogg|opus|wav|flac)(\?|#|$)/i.test(station.streamUrl)
+})
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
+  const total = Math.floor(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+const progressTrack = ref<HTMLElement | null>(null)
+const dragging = ref(false)
+
+function ratioFromEvent(event: PointerEvent): number {
+  const el = progressTrack.value
+  if (!el) return 0
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0) return 0
+  return Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+}
+
+function onSeekDown(event: PointerEvent) {
+  if (!seekable.value) return
+  dragging.value = true
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  seekTo(ratioFromEvent(event) * duration.value)
+}
+
+function onSeekMove(event: PointerEvent) {
+  if (!dragging.value) return
+  seekTo(ratioFromEvent(event) * duration.value)
+}
+
+function onSeekUp(event: PointerEvent) {
+  if (!dragging.value) return
+  dragging.value = false
+  const el = event.currentTarget as HTMLElement
+  if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId)
+}
 
 const renamingId = ref('')
 const renamingValue = ref('')
@@ -145,6 +195,31 @@ async function scrollToPlaying() {
               />
               <span class="vol-value">{{ volume }}</span>
             </div>
+          </div>
+          <div v-if="currentStation" class="timeline">
+            <template v-if="isLocalMedia">
+              <span class="time-label">{{ formatTime(currentTime) }}</span>
+              <div
+                ref="progressTrack"
+                class="progress-track"
+                :class="{ disabled: !seekable, dragging }"
+                @pointerdown="onSeekDown"
+                @pointermove="onSeekMove"
+                @pointerup="onSeekUp"
+                @pointercancel="onSeekUp"
+              >
+                <div class="progress-fill" :style="{ width: `${progress * 100}%` }"></div>
+                <div class="progress-thumb" :style="{ left: `${progress * 100}%` }"></div>
+              </div>
+              <span class="time-label">{{ formatTime(duration) }}</span>
+            </template>
+            <template v-else>
+              <span class="live-badge">LIVE</span>
+              <div class="live-bars" :class="{ paused: !playing && !loading }">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <span class="live-hint">直播流 · 不可拖动</span>
+            </template>
           </div>
           <div v-if="error" class="error-msg">{{ error }}</div>
         </div>
@@ -546,6 +621,137 @@ async function scrollToPlaying() {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Timeline: local / imported audio progress, live stream indicator */
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 16px;
+}
+
+.time-label {
+  width: 36px;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.38);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.progress-track {
+  position: relative;
+  flex: 1;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.progress-track.disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.progress-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.progress-fill {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--focus-color);
+  pointer-events: none;
+  transition: width 0.12s linear;
+}
+
+.progress-track.dragging .progress-fill {
+  transition: none;
+}
+
+.progress-thumb {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.progress-track:hover .progress-thumb,
+.progress-track.dragging .progress-thumb {
+  opacity: 1;
+}
+
+.live-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.live-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  flex: 1;
+}
+
+.live-bars span {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--focus-color) 70%, transparent);
+  animation: live-bar 1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.live-bars span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.live-bars span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.live-bars span:nth-child(4) {
+  animation-delay: 0.45s;
+}
+
+.live-bars.paused span {
+  animation-play-state: paused;
+  opacity: 0.4;
+}
+
+@keyframes live-bar {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+
+.live-hint {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.28);
 }
 
 .play-btn {

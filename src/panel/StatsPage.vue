@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
-import { useTasks, getTaskTimeCategory, todayString } from '../composables/useTasks'
+import { useTasks, getTaskTimeCategory, todayString, isRepeatActiveOn } from '../composables/useTasks'
 import BackButton from './BackButton.vue'
 
 type TimeRange = 'today' | 'week' | 'month' | 'all'
@@ -120,6 +120,7 @@ const selectedScheduledTasks = computed(() => {
   const date = selectedDate.value
   if (!date) return []
   return [...dailyTasks.value]
+    .filter(t => isRepeatActiveOn(t, date))
     .sort((a, b) => (a.repeatTime ?? '99:99').localeCompare(b.repeatTime ?? '99:99'))
     .map(t => ({
       id: t.id,
@@ -253,7 +254,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
               <span v-if="day.pomodoros > 0">{{ day.pomodoros }}🍅</span>
               <span v-if="day.tasks > 0" class="cell-task-count">{{ day.tasks }}✓</span>
             </span>
-            <div v-if="hoveredIndex === i && (day.pomodoros > 0 || day.tasks > 0)" class="cell-tooltip">
+            <div v-if="!heatExpanded && hoveredIndex === i && (day.pomodoros > 0 || day.tasks > 0)" class="cell-tooltip">
               {{ day.pomodoros }}🍅<template v-if="day.tasks > 0"> · {{ day.tasks }}✓</template>
             </div>
           </div>
@@ -717,7 +718,22 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 }
 
 .heatmap-grid.detailed .heat-cell {
-  aspect-ratio: 1.25;
+  aspect-ratio: 0.82;
+}
+
+.heatmap-grid.detailed .heat-cell .day-number {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+}
+
+.heatmap-grid.detailed .heat-cell .cell-count {
+  left: 5px;
+  right: auto;
+  bottom: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
 }
 
 .cell-count {

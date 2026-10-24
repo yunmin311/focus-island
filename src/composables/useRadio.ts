@@ -196,6 +196,16 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const loaded = ref(false)
 
+// 播放进度（本地 / 导入音频可拖动；直播流 duration 为 Infinity，不显示进度）
+const currentTime = ref(0)
+const duration = ref(0)
+const seekable = ref(false)
+
+const progress = computed(() => {
+  if (!seekable.value || duration.value <= 0) return 0
+  return Math.min(1, currentTime.value / duration.value)
+})
+
 const allStations = computed(() => [...PRESET_STATIONS, ...customStations.value])
 
 const currentStation = computed(() =>
@@ -408,6 +418,9 @@ function mediaErrorMessage(): string {
 async function loadAndPlay(url: string) {
   const a = getAudio()
   expectedSrc = url
+  currentTime.value = 0
+  duration.value = 0
+  seekable.value = false
   a.src = url
   a.load()
   a.volume = radioSettings.value.volume / 100
@@ -419,8 +432,32 @@ async function loadAndPlay(url: string) {
   }
 }
 
+function updateTimeline() {
+  const a = audio
+  if (!a) return
+  const d = a.duration
+  seekable.value = Number.isFinite(d) && d > 0
+  duration.value = seekable.value ? d : 0
+  currentTime.value = Number.isFinite(a.currentTime) ? a.currentTime : 0
+}
+
+function seekTo(seconds: number) {
+  const a = getAudio()
+  if (!seekable.value || duration.value <= 0) return
+  const target = Math.max(0, Math.min(seconds, duration.value))
+  a.currentTime = target
+  currentTime.value = target
+}
+
 function handleStreamFailure(reason: 'error' | 'ended' = 'error') {
   const station = currentStation.value
+  // 本地 / 导入的有限音频：播完就停，不参与直播重连
+  if (reason === 'ended' && seekable.value) {
+    playing.value = false
+    loading.value = false
+    currentTime.value = duration.value
+    return
+  }
   const isLive = /^https?:/i.test(expectedSrc)
   if (!isLive) {
     // 本地文件 / 本地下载音频：播完就停，失败才提示
@@ -490,6 +527,17 @@ function getAudio(): HTMLAudioElement {
     audio.addEventListener('waiting', () => { loading.value = true })
     audio.addEventListener('canplay', () => { loading.value = false })
     audio.addEventListener('canplaythrough', () => { loading.value = false })
+    audio.addEventListener('timeupdate', () => {
+      if (audio) currentTime.value = audio.currentTime
+    })
+    audio.addEventListener('loadedmetadata', updateTimeline)
+    audio.addEventListener('durationchange', updateTimeline)
+    audio.addEventListener('seeked', updateTimeline)
+    audio.addEventListener('emptied', () => {
+      currentTime.value = 0
+      duration.value = 0
+      seekable.value = false
+    })
   }
   return audio
 }
@@ -685,6 +733,11 @@ export function useRadio() {
     loading,
     error,
     volume,
+    currentTime,
+    duration,
+    seekable,
+    progress,
+    seekTo,
     play,
     pause,
     toggle,

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
-import { useTasks, getTaskTimeCategory, isTaskDoneOnDate, todayString, type Task } from '../composables/useTasks'
+import { useTasks, getTaskTimeCategory, isTaskDoneOnDate, isRepeatEnded, formatRepeatLabel, todayString, type Task, type RepeatOptions } from '../composables/useTasks'
 import { useTaskGroups } from '../composables/useTaskGroups'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { getCategoryColor } from '../composables/useMemos'
 import TaskGroupDialog from './TaskGroupDialog.vue'
 import CalendarDatePicker from './CalendarDatePicker.vue'
+import RepeatPicker from './RepeatPicker.vue'
 
 const props = defineProps<{ initialTab?: string; searchQuery?: string }>()
 const emit = defineEmits<{
@@ -151,8 +152,7 @@ const selectedDate = ref<string | null>(formatDateStr(new Date()))
 const showDatePicker = ref(false)
 const showGroupDropdown = ref(false)
 const showRepeatMenu = ref(false)
-const repeatDaily = ref(false)
-const repeatTime = ref('')
+const repeatConfig = ref<RepeatOptions | null>(null)
 const quickAddRef = ref<HTMLInputElement | null>(null)
 
 // --- Completed section ---
@@ -306,8 +306,7 @@ function handleAddTask() {
     selectedDate.value,
     selectedGroupId.value,
     undefined,
-    repeatDaily.value ? 'daily' : null,
-    repeatDaily.value ? repeatTime.value : null
+    repeatConfig.value
   )
   newTitle.value = ''
   quickAddRef.value?.focus()
@@ -502,7 +501,11 @@ function contextMoveToGroup(groupId: string | null) {
 
 function contextToggleRepeat() {
   if (!contextMenu.value) return
-  setTaskRepeat(contextMenu.value.taskId, contextMenu.value.repeat ? null : 'daily')
+  if (contextMenu.value.repeat) {
+    setTaskRepeat(contextMenu.value.taskId, null)
+  } else {
+    setTaskRepeat(contextMenu.value.taskId, { repeat: 'daily' })
+  }
   closeContextMenu()
 }
 
@@ -723,35 +726,29 @@ onBeforeUnmount(() => {
           @click.stop
           @focus="showGroupDropdown = false; showDatePicker = false; showRepeatMenu = false"
         />
-        <button class="inline-chip repeat-chip" :class="{ active: showRepeatMenu, on: repeatDaily }" @click.stop="showRepeatMenu = !showRepeatMenu; showDatePicker = false; showGroupDropdown = false" :title="repeatDaily ? '每日定时任务' : '设置重复'">
+        <button class="inline-chip repeat-chip" :class="{ active: showRepeatMenu, on: !!repeatConfig }" @click.stop="showRepeatMenu = !showRepeatMenu; showDatePicker = false; showGroupDropdown = false" :title="repeatConfig ? '每天重复任务' : '设置重复'">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>
           </svg>
-          <span class="chip-label repeat-label">{{ repeatDaily ? (repeatTime || '每天') : '重复' }}</span>
+          <span class="chip-label repeat-label">{{ repeatConfig ? '每天' : '重复' }}</span>
         </button>
-        <button v-if="!repeatDaily" class="inline-chip date-chip" :class="{ active: showDatePicker }" @click.stop="showDatePicker = !showDatePicker; showGroupDropdown = false; showRepeatMenu = false" :title="'到期: ' + (formatShortDate(selectedDate) || '无日期')">
+        <button v-if="!repeatConfig" class="inline-chip date-chip" :class="{ active: showDatePicker }" @click.stop="showDatePicker = !showDatePicker; showGroupDropdown = false; showRepeatMenu = false" :title="'到期: ' + (formatShortDate(selectedDate) || '无日期')">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
           </svg>
           <span class="chip-label">{{ formatShortDate(selectedDate) || '无日期' }}</span>
         </button>
       </div>
-      <!-- Repeat dropdown popup -->
-      <div v-if="showRepeatMenu" class="chip-dropdown repeat-dropdown-menu" @click.stop>
-        <button class="group-dropdown-item" :class="{ active: !repeatDaily }" @click="repeatDaily = false; repeatTime = ''; showRepeatMenu = false">
-          不重复
-        </button>
-        <button class="group-dropdown-item" :class="{ active: repeatDaily }" @click="repeatDaily = true">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>
-          </svg>
-          每天
-        </button>
-        <div v-if="repeatDaily" class="repeat-time-row">
-          <span class="repeat-time-label">定时</span>
-          <input v-model="repeatTime" type="time" class="repeat-time-input" @click.stop />
-          <button v-if="repeatTime" class="repeat-time-clear" @click.stop="repeatTime = ''" title="清除时间">清除</button>
-        </div>
+      <!-- Repeat picker popup -->
+      <div v-if="showRepeatMenu" class="chip-dropdown repeat-popover" @click.stop>
+        <RepeatPicker
+          :repeat="repeatConfig?.repeat ?? null"
+          :time="repeatConfig?.time ?? null"
+          :start="repeatConfig?.start ?? null"
+          :end="repeatConfig?.end ?? null"
+          @apply="repeatConfig = $event"
+          @close="showRepeatMenu = false"
+        />
       </div>
       <!-- Group dropdown popup -->
       <div v-if="showGroupDropdown" class="chip-dropdown group-dropdown-menu" @click.stop>
@@ -912,7 +909,7 @@ onBeforeUnmount(() => {
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>
               </svg>
-              每天{{ task.repeatTime ? ` ${task.repeatTime}` : '' }}
+              {{ formatRepeatLabel(task) }}
             </span>
             <span v-if="task.pomodoroCount > 0" class="task-pomodoro">🍅 {{ task.pomodoroCount }}</span>
             <span v-if="task.dueDate && task.repeat !== 'daily'" class="task-date">
@@ -978,14 +975,16 @@ onBeforeUnmount(() => {
               @click="emit('viewDetail', task.id)"
             >
               <div class="task-row">
-                <button class="task-checkbox checked" @click.stop="toggleComplete(task.id)">
+                <button v-if="!isRepeatEnded(task)" class="task-checkbox checked" @click.stop="toggleComplete(task.id)">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
                 </button>
-                <span class="task-title line-through">{{ task.title }}</span>
+                <span class="task-title" :class="{ 'line-through': !isRepeatEnded(task) }">{{ task.title }}</span>
+                <span v-if="isRepeatEnded(task)" class="task-repeat-badge ended">已结束</span>
                 <span v-if="task.pomodoroCount > 0" class="task-pomodoro completed-pomodoro">🍅 {{ task.pomodoroCount }}</span>
               </div>
-              <div v-if="task.dueDate || task.groupId" class="task-meta-row">
-                <span v-if="task.dueDate" class="task-date">{{ formatShortDate(task.dueDate) }}</span>
+              <div v-if="task.dueDate || task.groupId || isRepeatEnded(task)" class="task-meta-row">
+                <span v-if="isRepeatEnded(task)" class="task-repeat-badge">{{ formatRepeatLabel(task) }}</span>
+                <span v-else-if="task.dueDate" class="task-date">{{ formatShortDate(task.dueDate) }}</span>
                 <span v-if="task.groupId" class="task-group-badge">
                   <span class="group-dot-sm" :style="{ backgroundColor: getCategoryColor(groups.find(g => g.id === task.groupId)?.color ?? 'yellow').icon }"></span>
                   {{ groups.find(g => g.id === task.groupId)?.name ?? '' }}
@@ -1183,52 +1182,10 @@ onBeforeUnmount(() => {
   max-width: 62px;
 }
 
-.repeat-dropdown-menu {
+.repeat-popover {
   right: 12px;
-  min-width: 168px;
-}
-
-.repeat-time-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px 2px;
-  margin-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.repeat-time-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  flex-shrink: 0;
-}
-
-.repeat-time-input {
-  flex: 1;
-  min-width: 0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  padding: 3px 6px;
-  font-size: 11px;
-  font-family: inherit;
-  color: rgba(255, 255, 255, 0.85);
-  color-scheme: dark;
-  outline: none;
-}
-
-.repeat-time-clear {
-  background: none;
-  border: none;
-  padding: 2px 4px;
-  font-size: 11px;
-  font-family: inherit;
-  color: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-}
-
-.repeat-time-clear:hover {
-  color: #fff;
+  padding: 0;
+  min-width: 264px;
 }
 
 .task-repeat-badge {
@@ -1240,6 +1197,11 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--focus-color) 10%, transparent);
   padding: 1px 6px;
   border-radius: 4px;
+}
+
+.task-repeat-badge.ended {
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .quick-add-input {

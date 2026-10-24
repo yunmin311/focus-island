@@ -342,31 +342,33 @@ onUnmounted(() => {
     <!-- 更新（YM 版） -->
     <div class="settings-section">
       <div class="section-title">更新（YM 版）</div>
-      <div class="update-copy">
-        <span class="update-label">从我的 Release 检查更新</span>
-        <span class="update-hint">只查询 yunmin311/focus-island，发现新版跳转下载页</span>
-      </div>
-      <div class="update-action-row">
-        <button
-          type="button"
-          class="update-btn"
-          :disabled="forkChecking"
-          @click="checkForkUpdate(true)"
-        >
-          <span v-if="forkChecking" class="mini-spinner"></span>
-          <span>{{ forkChecking ? '检查中...' : '检查更新' }}</span>
-        </button>
-        <button
-          v-if="forkUpdateAvailable"
-          type="button"
-          class="update-btn primary"
-          @click="openLatestRelease"
-        >
-          前往下载
-        </button>
-        <span class="update-status" :class="{ error: Boolean(forkUpdateStatus.startsWith('检查失败')) }">
-          {{ forkUpdateStatus }}
-        </span>
+      <div class="setting-row">
+        <div class="update-copy">
+          <span class="update-label">从我的 Release 检查更新</span>
+          <span class="update-hint">只查询 yunmin311/focus-island，发现新版跳转下载页</span>
+          <span class="update-status" :class="{ error: Boolean(forkUpdateStatus.startsWith('检查失败')) }">
+            {{ forkUpdateStatus }}
+          </span>
+        </div>
+        <div class="setting-actions">
+          <button
+            v-if="forkUpdateAvailable"
+            type="button"
+            class="update-btn primary"
+            @click="openLatestRelease"
+          >
+            前往下载
+          </button>
+          <button
+            type="button"
+            class="update-btn"
+            :disabled="forkChecking"
+            @click="checkForkUpdate(true)"
+          >
+            <span v-if="forkChecking" class="mini-spinner"></span>
+            <span>{{ forkChecking ? '检查中...' : '检查更新' }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -467,12 +469,14 @@ onUnmounted(() => {
     <!-- 重置 -->
     <div class="settings-section">
       <div class="section-title">重置</div>
-      <div class="update-copy">
-        <span class="update-label">恢复默认设置</span>
-        <span class="update-hint">主题、透明度、显示模式、快捷键、标语全部恢复默认</span>
-      </div>
-      <div class="update-action-row">
-        <button type="button" class="update-btn" @click="resetAllSettings">恢复默认设置</button>
+      <div class="setting-row">
+        <div class="update-copy">
+          <span class="update-label">恢复默认设置</span>
+          <span class="update-hint">主题、透明度、显示模式、快捷键、标语全部恢复默认</span>
+        </div>
+        <div class="setting-actions">
+          <button type="button" class="update-btn danger" @click="resetAllSettings">恢复默认设置</button>
+        </div>
       </div>
     </div>
 
@@ -622,6 +626,20 @@ onUnmounted(() => {
 }
 
 /* 更新 */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.setting-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .update-toggle-row {
   display: flex;
   align-items: center;
@@ -740,13 +758,25 @@ onUnmounted(() => {
   color: #fff;
 }
 
+.update-btn.danger {
+  background: rgba(248, 113, 113, 0.06);
+  border-color: rgba(248, 113, 113, 0.22);
+  color: rgba(248, 113, 113, 0.9);
+}
+
+.update-btn.danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
+}
+
 .update-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 .update-status {
-  flex: 1 1 140px;
+  margin-top: 4px;
   font-size: 10px;
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.42);

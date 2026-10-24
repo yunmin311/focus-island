@@ -60,7 +60,16 @@ export interface Task {
   lastActiveAt: number
   repeat?: TaskRepeat | null
   repeatTime?: string | null
+  repeatStart?: string | null
+  repeatEnd?: string | null
   completionDates?: string[]
+}
+
+export interface RepeatOptions {
+  repeat: TaskRepeat
+  time?: string | null
+  start?: string | null
+  end?: string | null
 }
 
 interface TaskBuckets {
@@ -77,7 +86,11 @@ interface TaskBuckets {
 }
 
 export function getTaskTimeCategory(task: Task, today = todayString.value): TimeCategory {
-  if (task.repeat === 'daily') return 'today'
+  if (task.repeat === 'daily') {
+    if (isRepeatEnded(task)) return 'nodate'
+    if (task.repeatStart && task.repeatStart > today) return 'later'
+    return 'today'
+  }
   if (!task.dueDate) return 'nodate'
   const due = parseDateStr(task.dueDate)
   const diff = Math.floor((due.getTime() - parseDateStr(today).getTime()) / (24 * 60 * 60 * 1000))
@@ -98,6 +111,35 @@ export function isTaskDoneOnDate(task: Task, date: string): boolean {
 
 export function isRecurringTask(task: Task): boolean {
   return task.repeat === 'daily'
+}
+
+// 重复任务在指定日期是否处于生效区间
+export function isRepeatActiveOn(task: Task, date: string): boolean {
+  if (task.repeat !== 'daily') return false
+  const start = task.repeatStart ?? task.dueDate ?? ''
+  if (start && start > date) return false
+  if (task.repeatEnd && date > task.repeatEnd) return false
+  return true
+}
+
+export function isRepeatEnded(task: Task, today = todayString.value): boolean {
+  if (task.repeat !== 'daily') return false
+  return !!task.repeatEnd && today > task.repeatEnd
+}
+
+// 卡片/详情页的重复摘要，例如“每天 08:00 · 至 11/30”
+export function formatRepeatLabel(task: Task): string {
+  if (task.repeat !== 'daily') return ''
+  let label = '每天'
+  if (task.repeatTime) label += ` ${task.repeatTime}`
+  if (task.repeatEnd) {
+    const [, m, d] = task.repeatEnd.split('-').map(Number)
+    label += ` · 至 ${m}/${d}`
+  } else if (task.repeatStart && task.repeatStart > todayString.value) {
+    const [, m, d] = task.repeatStart.split('-').map(Number)
+    label += ` · ${m}/${d} 起`
+  }
+  return label
 }
 
 // --- State ---
@@ -136,6 +178,8 @@ async function load() {
         subtasks: t.subtasks ?? [],
         repeat: t.repeat ?? null,
         repeatTime: t.repeatTime ?? null,
+        repeatStart: t.repeatStart ?? (t.repeat === 'daily' ? (t.dueDate ?? toDateStr(new Date())) : null),
+        repeatEnd: t.repeatEnd ?? null,
         completionDates: t.completionDates ?? [],
         ...t,
         lastActiveAt: t.lastActiveAt ?? 0,
@@ -197,16 +241,16 @@ export function useTasks() {
     dueDate?: string | null,
     groupId?: string | null,
     priority?: TaskPriority,
-    repeat?: TaskRepeat | null,
-    repeatTime?: string | null
+    repeatOptions?: RepeatOptions | null
   ) {
     const now = Date.now()
+    const today = toDateStr(new Date())
     const task: Task = {
       id: crypto.randomUUID(),
       title: title.trim(),
       note: '',
       groupId: groupId ?? null,
-      dueDate: repeat === 'daily' ? toDateStr(new Date()) : (dueDate ?? toDateStr(new Date())),
+      dueDate: repeatOptions ? today : (dueDate ?? today),
       completed: false,
       pomodoroCount: 0,
       priority: priority ?? 0,
@@ -214,8 +258,10 @@ export function useTasks() {
       createdAt: now,
       updatedAt: now,
       lastActiveAt: 0,
-      repeat: repeat ?? null,
-      repeatTime: repeatTime || null,
+      repeat: repeatOptions?.repeat ?? null,
+      repeatTime: repeatOptions?.time || null,
+      repeatStart: repeatOptions ? (repeatOptions.start || today) : null,
+      repeatEnd: repeatOptions?.end || null,
       completionDates: [],
     }
 
@@ -223,7 +269,7 @@ export function useTasks() {
     return task
   }
 
-  function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'note' | 'groupId' | 'dueDate' | 'completed' | 'priority' | 'repeat' | 'repeatTime'>>) {
+  function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'note' | 'groupId' | 'dueDate' | 'completed' | 'priority' | 'repeat' | 'repeatTime' | 'repeatStart' | 'repeatEnd'>>) {
     const task = tasks.value.find(t => t.id === id)
     if (!task) return
 
@@ -241,18 +287,21 @@ export function useTasks() {
   }
 
   // 切换/取消每日重复
-  function setTaskRepeat(id: string, repeat: TaskRepeat | null, repeatTime?: string | null) {
+  function setTaskRepeat(id: string, options: RepeatOptions | null) {
     const task = tasks.value.find(t => t.id === id)
     if (!task) return
 
-    task.repeat = repeat
-    task.repeatTime = repeatTime || null
+    const today = toDateStr(new Date())
+    task.repeat = options?.repeat ?? null
+    task.repeatTime = options?.time || null
+    task.repeatStart = options ? (options.start || today) : null
+    task.repeatEnd = options?.end || null
     task.completionDates = task.completionDates ?? []
 
-    if (repeat === 'daily') {
+    if (options) {
       task.completed = false
       task.priority = 0
-      task.dueDate = toDateStr(new Date())
+      task.dueDate = today
     }
 
     task.updatedAt = Date.now()
@@ -276,6 +325,7 @@ export function useTasks() {
 
     // 每日重复任务：勾选记录当天完成，取消勾选撤销当天记录
     if (task.repeat === 'daily') {
+      if (isRepeatEnded(task)) return
       const today = toDateStr(new Date())
       const dates = task.completionDates ?? (task.completionDates = [])
       const idx = dates.indexOf(today)
@@ -373,8 +423,13 @@ export function useTasks() {
     }
 
     for (const task of tasks.value) {
-      // 每日重复任务始终归入“今天”，不受完成状态/到期日影响
+      // 每日重复任务：按生效区间归入“今天 / 稍后 / 已完成（已结束）”
       if (task.repeat === 'daily') {
+        if (isRepeatEnded(task)) {
+          buckets.completed.push(task)
+          continue
+        }
+
         buckets.active.push(task)
         if (task.lastActiveAt > 0) {
           buckets.recentFocus.push(task)
@@ -387,7 +442,12 @@ export function useTasks() {
             buckets.groups.set(task.groupId, [task])
           }
         }
-        buckets.today.push(task)
+
+        if (task.repeatStart && task.repeatStart > todayString.value) {
+          buckets.later.push(task)
+        } else {
+          buckets.today.push(task)
+        }
         continue
       }
 

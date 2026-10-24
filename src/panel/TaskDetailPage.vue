@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useTasks, isTaskDoneOnDate, todayString, type Task } from '../composables/useTasks'
+import { useTasks, isTaskDoneOnDate, isRepeatEnded, formatRepeatLabel, todayString, type Task, type RepeatOptions } from '../composables/useTasks'
 import { useTaskGroups } from '../composables/useTaskGroups'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { getCategoryColor } from '../composables/useMemos'
 import CalendarDatePicker from './CalendarDatePicker.vue'
+import RepeatPicker from './RepeatPicker.vue'
 
 const props = defineProps<{ taskId: string }>()
 const emit = defineEmits<{ back: [] }>()
@@ -98,15 +99,10 @@ function selectGroup(groupId: string | null) {
 }
 
 // --- Repeat ---
-function selectRepeat(repeat: 'daily' | null) {
+function onRepeatApply(options: RepeatOptions | null) {
   if (!task.value) return
-  setTaskRepeat(task.value.id, repeat, task.value.repeatTime ?? null)
+  setTaskRepeat(task.value.id, options)
   showRepeatMenu.value = false
-}
-
-function onRepeatTimeChange(e: Event) {
-  if (!task.value) return
-  updateTask(task.value.id, { repeatTime: (e.target as HTMLInputElement).value || null })
 }
 
 // --- Notes ---
@@ -226,7 +222,8 @@ onBeforeUnmount(() => {
       <div class="title-row">
         <button
           class="task-checkbox"
-          :class="{ checked: isTaskDoneOnDate(task!, todayStr) }"
+          :class="{ checked: isTaskDoneOnDate(task!, todayStr), disabled: isRepeatEnded(task!) }"
+          :disabled="isRepeatEnded(task!)"
           @click="toggleComplete(task!.id)"
         >
           <svg v-if="isTaskDoneOnDate(task!, todayStr)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
@@ -300,26 +297,18 @@ onBeforeUnmount(() => {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>
               </svg>
-              <span>{{ task!.repeat === 'daily' ? `每天${task!.repeatTime ? ' ' + task!.repeatTime : ''}` : '不重复' }}</span>
+              <span>{{ task!.repeat === 'daily' ? formatRepeatLabel(task!) : '不重复' }}</span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div v-if="showRepeatMenu" class="dropdown-menu repeat-menu" @click.stop>
-              <button class="dropdown-item" :class="{ active: task!.repeat !== 'daily' }" @click="selectRepeat(null)">
-                不重复
-              </button>
-              <button class="dropdown-item" :class="{ active: task!.repeat === 'daily' }" @click="selectRepeat('daily')">
-                每天
-              </button>
-              <div v-if="task!.repeat === 'daily'" class="repeat-time-row">
-                <span class="repeat-time-label">定时</span>
-                <input
-                  type="time"
-                  class="repeat-time-input"
-                  :value="task!.repeatTime ?? ''"
-                  @change="onRepeatTimeChange"
-                  @click.stop
-                />
-              </div>
+              <RepeatPicker
+                :repeat="task!.repeat ?? null"
+                :time="task!.repeatTime ?? null"
+                :start="task!.repeatStart ?? null"
+                :end="task!.repeatEnd ?? null"
+                @apply="onRepeatApply"
+                @close="showRepeatMenu = false"
+              />
             </div>
           </div>
         </div>
@@ -588,6 +577,11 @@ onBeforeUnmount(() => {
   color: var(--focus-color);
 }
 
+.task-checkbox.disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .title-display {
   flex: 1;
   display: flex;
@@ -839,39 +833,15 @@ onBeforeUnmount(() => {
   color: var(--focus-color);
 }
 
+.repeat-menu {
+  padding: 0;
+  min-width: 264px;
+}
+
 .repeat-btn.on {
   background: color-mix(in srgb, var(--focus-color) 10%, transparent);
   border-color: color-mix(in srgb, var(--focus-color) 25%, transparent);
   color: color-mix(in srgb, var(--focus-color) 75%, #fff);
-}
-
-.repeat-time-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px 2px;
-  margin-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.repeat-time-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  flex-shrink: 0;
-}
-
-.repeat-time-input {
-  flex: 1;
-  min-width: 0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  padding: 3px 6px;
-  font-size: 11px;
-  font-family: inherit;
-  color: rgba(255, 255, 255, 0.85);
-  color-scheme: dark;
-  outline: none;
 }
 
 /* Notes section */

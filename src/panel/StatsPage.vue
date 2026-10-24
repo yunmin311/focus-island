@@ -442,8 +442,8 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 0 4px;
+  gap: 12px;
+  padding: 0 12px 12px;
   overflow-y: auto;
 }
 
@@ -451,7 +451,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 0;
+  padding: 10px 0;
 }
 
 .back-btn {

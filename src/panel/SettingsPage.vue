@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode, type EmailProvider } from '../composables/useSettings'
 import { useNotifications } from '../composables/useNotifications'
@@ -76,6 +76,27 @@ const emailTesting = ref(false)
 const emailHasCredential = ref(false)
 const emailStatus = ref('')
 const emailStatusOk = ref<boolean | null>(null)
+const emailExpanded = ref(false)
+
+const emailProviderLabel = computed(
+  () => emailProviders.find(provider => provider.id === settings.value.emailProvider)?.label ?? 'QQ',
+)
+
+const emailSummary = computed(() => {
+  const address = settings.value.emailAddress.trim()
+  if (!address) return '未配置'
+  const credential = emailHasCredential.value ? '已保存授权码' : '未保存授权码'
+  return `${emailProviderLabel.value} · ${address} · ${credential}`
+})
+
+watch(
+  () => settings.value.emailEnabled,
+  (enabled) => {
+    if (enabled && !settings.value.emailAddress.trim()) {
+      emailExpanded.value = true
+    }
+  },
+)
 
 async function refreshEmailCredentialStatus() {
   const email = settings.value.emailAddress.trim()
@@ -491,9 +512,9 @@ onUnmounted(() => {
           <span class="switch-track"></span>
         </label>
       </div>
-      <div v-if="settings.systemNotificationMirror" class="mirror-mode-row">
-        <span class="mirror-hint">镜像范围</span>
-        <div class="mode-toggle mirror-mode-toggle">
+      <div v-if="settings.systemNotificationMirror" class="setting-option-row">
+        <span class="update-label">镜像范围</span>
+        <div class="mode-toggle">
           <button
             type="button"
             class="mode-btn"
@@ -541,7 +562,7 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
-      <div class="update-toggle-row" style="margin-top: 10px;">
+      <div class="update-toggle-row row-spaced">
         <div class="update-copy">
           <span class="update-label">专注时静默</span>
           <span class="update-hint">番茄计时运行中，系统通知与邮件只记录到通知中心，不弹岛内提示</span>
@@ -566,7 +587,25 @@ onUnmounted(() => {
           <span class="switch-track"></span>
         </label>
       </div>
-      <div class="email-form">
+      <button type="button" class="email-config-row row-spaced" @click="emailExpanded = !emailExpanded">
+        <span class="update-copy">
+          <span class="update-label">账号与授权码</span>
+          <span class="update-hint">{{ emailSummary }}</span>
+        </span>
+        <svg
+          class="email-config-chevron"
+          :class="{ open: emailExpanded }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <div v-if="emailExpanded" class="email-form">
         <div class="mode-toggle email-provider-toggle">
           <button
             v-for="provider in emailProviders"
@@ -1000,21 +1039,19 @@ onUnmounted(() => {
 }
 
 .mirror-sources {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
-.mirror-mode-row {
+.row-spaced {
+  margin-top: 8px;
+}
+
+.setting-option-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.mirror-mode-toggle .mode-btn {
-  height: 26px;
-  padding: 0 10px;
-  font-size: 11px;
+  gap: 12px;
+  margin-top: 8px;
 }
 
 .mirror-empty {
@@ -1080,11 +1117,42 @@ onUnmounted(() => {
   color: color-mix(in srgb, var(--focus-color) 95%, #fff);
 }
 
+.email-config-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.email-config-row:hover .update-label {
+  color: #fff;
+}
+
+.email-config-chevron {
+  width: 14px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.email-config-chevron.open {
+  transform: rotate(180deg);
+}
+
 .email-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .email-provider-toggle {

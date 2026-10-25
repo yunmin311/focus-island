@@ -161,7 +161,7 @@ onMounted(refreshVolume)
 
 .page-title {
   flex: 1;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #e8e8ea;
 }
@@ -170,7 +170,7 @@ onMounted(refreshVolume)
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.55);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 6px;
@@ -192,7 +192,7 @@ onMounted(refreshVolume)
 }
 
 .section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.6);
   margin-bottom: 8px;
@@ -295,9 +295,9 @@ onMounted(refreshVolume)
 
 .notif-item {
   display: flex;
-  gap: 8px;
+  gap: 9px;
   align-items: flex-start;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.03);
@@ -309,10 +309,10 @@ onMounted(refreshVolume)
 }
 
 .notif-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  margin-top: 5px;
+  margin-top: 6px;
   background: rgba(255, 255, 255, 0.18);
   flex-shrink: 0;
 }
@@ -336,7 +336,7 @@ onMounted(refreshVolume)
 .notif-title {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #e8e8ea;
   overflow: hidden;
@@ -347,10 +347,10 @@ onMounted(refreshVolume)
 .notif-app {
   flex-shrink: 0;
   max-width: 40%;
-  font-size: 9px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.45);
   background: rgba(255, 255, 255, 0.06);
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   line-height: 1.4;
   overflow: hidden;
@@ -359,22 +359,22 @@ onMounted(refreshVolume)
 }
 
 .notif-time {
-  font-size: 10px;
+  font-size: 10.5px;
   color: rgba(255, 255, 255, 0.40);
   font-variant-numeric: tabular-nums;
 }
 
 .notif-detail {
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.55);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .empty {
   flex: 1;
   display: grid;
   place-items: center;
-  font-size: 12px;
+  font-size: 12.5px;
   color: rgba(255, 255, 255, 0.35);
 }
 </style>

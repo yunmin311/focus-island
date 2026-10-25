@@ -49,6 +49,8 @@ interface TaskReminderPayload {
 const systemPeek = ref<SystemPeekItem | null>(null);
 const systemPeekQueue: SystemPeekItem[] = [];
 let systemPeekTimer: number | null = null;
+let systemPeekStartedAt = 0;
+let systemPeekRemaining = 0;
 const SYSTEM_PEEK_MS = 5000;
 const SYSTEM_PEEK_QUEUE_LIMIT = 2;
 const SYSTEM_PEEK_MAX_AGE_MS = 15000;
@@ -142,20 +144,39 @@ function closeSystemPeek(clearQueue = false) {
     if (clearQueue) systemPeekQueue.length = 0;
 }
 
+function scheduleSystemPeekEnd(ms: number) {
+    clearSystemPeekTimer();
+    systemPeekStartedAt = Date.now();
+    systemPeekRemaining = ms;
+    systemPeekTimer = window.setTimeout(() => {
+        systemPeekTimer = null;
+        systemPeek.value = null;
+        showNextSystemPeek();
+    }, ms);
+}
+
 function showNextSystemPeek() {
     if (systemPeek.value || notificationType.value) return;
     while (systemPeekQueue.length > 0) {
         const next = systemPeekQueue.shift()!;
         if (Date.now() - next.receivedAt > SYSTEM_PEEK_MAX_AGE_MS) continue;
         systemPeek.value = next;
-        clearSystemPeekTimer();
-        systemPeekTimer = window.setTimeout(() => {
-            systemPeek.value = null;
-            systemPeekTimer = null;
-            showNextSystemPeek();
-        }, SYSTEM_PEEK_MS);
+        scheduleSystemPeekEnd(SYSTEM_PEEK_MS);
         return;
     }
+}
+
+// 悬停暂停自动收起：鼠标移入时冻结剩余时间，移出后继续
+function onSystemPeekHold() {
+    if (systemPeekTimer === null) return;
+    const elapsed = Date.now() - systemPeekStartedAt;
+    systemPeekRemaining = Math.max(600, systemPeekRemaining - elapsed);
+    clearSystemPeekTimer();
+}
+
+function onSystemPeekResume() {
+    if (!systemPeek.value || systemPeekTimer !== null) return;
+    scheduleSystemPeekEnd(systemPeekRemaining > 0 ? systemPeekRemaining : SYSTEM_PEEK_MS);
 }
 
 function pushPeekItem(item: SystemPeekItem) {
@@ -473,6 +494,8 @@ onUnmounted(() => {
                 :data="systemPeek"
                 :scale="settings.islandScale ?? 1"
                 @open="onSystemPeekOpen"
+                @hold="onSystemPeekHold"
+                @resume="onSystemPeekResume"
             />
         </div>
     </div>

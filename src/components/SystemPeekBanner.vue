@@ -6,7 +6,7 @@ const props = defineProps<{
   scale: number
 }>()
 
-const emit = defineEmits<{ open: [] }>()
+const emit = defineEmits<{ open: []; hold: []; resume: [] }>()
 
 const appName = computed(() => props.data?.app?.trim() ?? '')
 const title = computed(() => {
@@ -30,6 +30,8 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
       role="button"
       title="打开通知中心"
       @click="emit('open')"
+      @mouseenter="emit('hold')"
+      @mouseleave="emit('resume')"
     >
       <div class="peek-icon">
         <span v-if="initial" class="peek-initial">{{ initial }}</span>
@@ -72,16 +74,16 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
 @reference "../styles.css";
 
 .peek-banner {
-  width: calc(340px * var(--peek-scale, 1));
-  height: calc(54px * var(--peek-scale, 1));
-  border-radius: calc(18px * var(--peek-scale, 1));
+  width: calc(392px * var(--peek-scale, 1));
+  height: calc(62px * var(--peek-scale, 1));
+  border-radius: calc(20px * var(--peek-scale, 1));
   background: var(--notif-bg);
   border: 1px solid var(--notif-border);
   box-shadow: var(--notif-shadow);
   display: flex;
   align-items: center;
-  gap: calc(8px * var(--peek-scale, 1));
-  padding: 0 calc(12px * var(--peek-scale, 1));
+  gap: calc(10px * var(--peek-scale, 1));
+  padding: 0 calc(14px * var(--peek-scale, 1));
   pointer-events: auto;
   cursor: pointer;
   contain: layout style paint;
@@ -93,8 +95,8 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
 }
 
 .peek-icon {
-  width: calc(28px * var(--peek-scale, 1));
-  height: calc(28px * var(--peek-scale, 1));
+  width: calc(32px * var(--peek-scale, 1));
+  height: calc(32px * var(--peek-scale, 1));
   border-radius: 50%;
   background: var(--notif-icon-bg);
   color: var(--notif-title-color);
@@ -105,12 +107,12 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
 }
 
 .peek-icon svg {
-  width: calc(15px * var(--peek-scale, 1));
-  height: calc(15px * var(--peek-scale, 1));
+  width: calc(17px * var(--peek-scale, 1));
+  height: calc(17px * var(--peek-scale, 1));
 }
 
 .peek-initial {
-  font-size: calc(12px * var(--peek-scale, 1));
+  font-size: calc(14px * var(--peek-scale, 1));
   font-weight: 700;
   line-height: 1;
 }
@@ -120,23 +122,23 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: calc(2px * var(--peek-scale, 1));
+  gap: calc(3px * var(--peek-scale, 1));
 }
 
 .peek-line {
   display: flex;
   align-items: center;
-  gap: calc(6px * var(--peek-scale, 1));
+  gap: calc(7px * var(--peek-scale, 1));
   min-width: 0;
 }
 
 .peek-app {
   flex-shrink: 0;
   max-width: 45%;
-  font-size: calc(9px * var(--peek-scale, 1));
+  font-size: calc(10px * var(--peek-scale, 1));
   color: var(--notif-sub-color);
   background: var(--notif-icon-bg);
-  padding: calc(1px * var(--peek-scale, 1)) calc(5px * var(--peek-scale, 1));
+  padding: calc(2px * var(--peek-scale, 1)) calc(6px * var(--peek-scale, 1));
   border-radius: calc(4px * var(--peek-scale, 1));
   line-height: 1.4;
   white-space: nowrap;
@@ -145,7 +147,7 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
 }
 
 .peek-title {
-  font-size: calc(12px * var(--peek-scale, 1));
+  font-size: calc(14px * var(--peek-scale, 1));
   font-weight: 700;
   color: var(--notif-title-color);
   line-height: 1.2;
@@ -155,7 +157,7 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
 }
 
 .peek-sub {
-  font-size: calc(10px * var(--peek-scale, 1));
+  font-size: calc(12px * var(--peek-scale, 1));
   color: var(--notif-sub-color);
   line-height: 1.2;
   white-space: nowrap;
@@ -164,8 +166,8 @@ const initial = computed(() => (appName.value ? Array.from(appName.value)[0] : '
 }
 
 .peek-chevron {
-  width: calc(12px * var(--peek-scale, 1));
-  height: calc(12px * var(--peek-scale, 1));
+  width: calc(13px * var(--peek-scale, 1));
+  height: calc(13px * var(--peek-scale, 1));
   color: var(--notif-sub-color);
   opacity: 0.5;
   flex-shrink: 0;

@@ -167,6 +167,7 @@ let unlistenResize: (() => void) | null = null
 let unlistenMove: (() => void) | null = null
 let unlistenTransition: (() => void) | null = null
 let unlistenFocus: (() => void) | null = null
+let unlistenOpenNotifications: (() => void) | null = null
 let repositionTimers: number[] = []
 let closeFallbackTimer: number | null = null
 let suppressMoveEventsUntil = 0
@@ -340,6 +341,11 @@ onMounted(async () => {
     void onWindowTransition(String(event.payload ?? ''))
   })
 
+  // 岛内系统通知 peek 点击后：直接切到通知中心
+  unlistenOpenNotifications = await listen('open-notifications', () => {
+    currentView.value = 'notifications'
+  })
+
   unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
     panelFocused.value = focused
     if (focused && panelAnimState.value === 'steady') {
@@ -366,6 +372,7 @@ onUnmounted(() => {
   if (unlistenMove) unlistenMove()
   if (unlistenTransition) unlistenTransition()
   if (unlistenFocus) unlistenFocus()
+  if (unlistenOpenNotifications) unlistenOpenNotifications()
 })
 
 async function closeWindow() {

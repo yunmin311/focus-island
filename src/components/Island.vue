@@ -10,6 +10,8 @@ import CapsuleIdle from "./CapsuleIdle.vue";
 import DockStrip from "./DockStrip.vue";
 import CapsuleFocus from "./CapsuleFocus.vue";
 import NotificationBanner from "./NotificationBanner.vue";
+import SystemPeekBanner from "./SystemPeekBanner.vue";
+import type { SystemNotificationPayload } from "../composables/useNotifications";
 import type { TimerStatePayload } from "../composables/useTimerBridge";
 
 const { state, setState, setNotificationVisible } = useIslandState();
@@ -23,10 +25,26 @@ let unlistenSettings: (() => void) | null = null;
 let unlistenPanelMotion: (() => void) | null = null;
 let unlistenRadio: (() => void) | null = null;
 let unlistenNotification: (() => void) | null = null;
+let unlistenSystemNotification: (() => void) | null = null;
 let activityTimer: ReturnType<typeof setInterval> | null = null;
 
 const radioPlaying = ref(false);
 const notificationType = ref<NotificationType>(null);
+
+// 系统通知镜像的岛内 peek：无按钮、自动消失，点击打开通知中心
+interface SystemPeekItem {
+    key: string;
+    app: string;
+    title: string;
+    body: string;
+    receivedAt: number;
+}
+const systemPeek = ref<SystemPeekItem | null>(null);
+const systemPeekQueue: SystemPeekItem[] = [];
+let systemPeekTimer: number | null = null;
+const SYSTEM_PEEK_MS = 5000;
+const SYSTEM_PEEK_QUEUE_LIMIT = 2;
+const SYSTEM_PEEK_MAX_AGE_MS = 15000;
 
 const shellRef = ref<HTMLElement | null>(null);
 let layoutObserver: ResizeObserver | null = null;
@@ -48,14 +66,28 @@ async function reportLayout() {
 const panelOpen = ref(false);
 
 // Watch notification visibility and toggle click-through + resize window
-watch([notificationType, panelOpen], () => {
-    const visible = notificationType.value !== null;
+watch([notificationType, systemPeek, panelOpen], () => {
+    const visible = notificationType.value !== null || systemPeek.value !== null;
     setNotificationVisible(visible);
     // dock（刘海）模式下点击穿透由 useDockMode 统一管理
     if (settings.value.islandDisplayMode !== "dock") {
         // 面板打开时舞台必须穿透，否则 500x160 舞台会盖住面板顶部的按钮
         invoke("set_click_through", { ignore: !visible || panelOpen.value });
     }
+});
+
+// 番茄横幅优先级更高：它出现时收起系统 peek，结束后再补上排队的系统通知
+watch(notificationType, (type) => {
+    if (type) {
+        closeSystemPeek();
+    } else {
+        nextTick(showNextSystemPeek);
+    }
+});
+
+// 面板打开时收起 peek，避免横幅压在面板上
+watch(panelOpen, (open) => {
+    if (open) closeSystemPeek(true);
 });
 
 // 悬停展开后的胶囊：点击打开专注清单
@@ -65,7 +97,7 @@ function onCapsuleClick() {
 }
 
 // 形变 / 缩放 / 通知后上报新矩形
-watch([showStrip, notificationType, () => settings.value.islandScale], () => {
+watch([showStrip, notificationType, systemPeek, () => settings.value.islandScale], () => {
     nextTick(reportLayout);
 });
 
@@ -88,6 +120,61 @@ function playNotificationSound() {
     } catch {
         // Audio not available
     }
+}
+
+function clearSystemPeekTimer() {
+    if (systemPeekTimer !== null) {
+        window.clearTimeout(systemPeekTimer);
+        systemPeekTimer = null;
+    }
+}
+
+function closeSystemPeek(clearQueue = false) {
+    clearSystemPeekTimer();
+    systemPeek.value = null;
+    if (clearQueue) systemPeekQueue.length = 0;
+}
+
+function showNextSystemPeek() {
+    if (systemPeek.value || notificationType.value) return;
+    while (systemPeekQueue.length > 0) {
+        const next = systemPeekQueue.shift()!;
+        if (Date.now() - next.receivedAt > SYSTEM_PEEK_MAX_AGE_MS) continue;
+        systemPeek.value = next;
+        clearSystemPeekTimer();
+        systemPeekTimer = window.setTimeout(() => {
+            systemPeek.value = null;
+            systemPeekTimer = null;
+            showNextSystemPeek();
+        }, SYSTEM_PEEK_MS);
+        return;
+    }
+}
+
+function enqueueSystemPeek(payload: SystemNotificationPayload) {
+    // 面板已打开时不再弹 peek：横幅会盖住面板顶部
+    if (panelOpen.value) return;
+    const app = (payload.app ?? "").trim();
+    const title = (payload.title ?? "").trim();
+    const body = (payload.body ?? "").trim();
+    if (!app && !title && !body) return;
+    if (systemPeekQueue.length >= SYSTEM_PEEK_QUEUE_LIMIT) {
+        systemPeekQueue.shift();
+    }
+    systemPeekQueue.push({
+        key: `${payload.id}-${payload.created_ms}`,
+        app,
+        title,
+        body,
+        receivedAt: Date.now(),
+    });
+    showNextSystemPeek();
+}
+
+function onSystemPeekOpen() {
+    closeSystemPeek(true);
+    void emit("open-notifications");
+    void invoke("show_panel");
 }
 
 function onNotifConfirm() {
@@ -245,16 +332,27 @@ onMounted(async () => {
         notificationType.value = payload;
         if (payload) playNotificationSound();
     });
+
+    // 系统通知镜像：短暂在岛内 peek，无按钮，点击进通知中心
+    unlistenSystemNotification = await listen<SystemNotificationPayload>(
+        "system-notification",
+        ({ payload }) => {
+            if (payload) enqueueSystemPeek(payload);
+        },
+    );
 });
 
 onUnmounted(() => {
     if (activityTimer !== null) clearInterval(activityTimer);
     layoutObserver?.disconnect();
+    clearSystemPeekTimer();
+    systemPeekQueue.length = 0;
     unlisten?.();
     unlistenSettings?.();
     unlistenPanelMotion?.();
     unlistenRadio?.();
     unlistenNotification?.();
+    unlistenSystemNotification?.();
     stopLocalCountdown();
     if (panelMotionTimer) {
         window.clearTimeout(panelMotionTimer);
@@ -335,6 +433,11 @@ onUnmounted(() => {
                 @confirm="onNotifConfirm"
                 @extend="onNotifExtend"
                 @dismiss="onNotifDismiss"
+            />
+            <SystemPeekBanner
+                :data="systemPeek"
+                :scale="settings.islandScale ?? 1"
+                @open="onSystemPeekOpen"
             />
         </div>
     </div>

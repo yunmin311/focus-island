@@ -30,11 +30,32 @@ export interface SystemNotificationPayload {
 
 const NOTIF_FILE = 'focus-island/notifications.json'
 const LIMIT = 200
+// 系统通知按系统逻辑短期缓存；专注提醒保留更久
+const SYSTEM_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const FOCUS_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 const records = ref<NotificationRecord[]>([])
 const loaded = ref(false)
 let listening = false
 const systemKeys = new Set<string>()
+
+function pruneByRetention(list: NotificationRecord[]): NotificationRecord[] {
+  const now = Date.now()
+  return list
+    .filter((record) => {
+      const ttl = record.kind === 'system' ? SYSTEM_TTL_MS : FOCUS_TTL_MS
+      return now - record.time <= ttl
+    })
+    .slice(0, LIMIT)
+}
+
+/** 清理过期记录；有变化时落盘 */
+export function pruneExpiredRecords() {
+  if (!loaded.value) return
+  const before = records.value.length
+  records.value = pruneByRetention(records.value)
+  if (records.value.length !== before) save()
+}
 
 const unreadCount = computed(() => records.value.filter(r => !r.read).length)
 
@@ -48,14 +69,20 @@ const KIND_LABELS: Record<
 }
 
 async function load() {
+  let prunedOnLoad = false
   try {
     const raw = await readTextFile(NOTIF_FILE, { baseDir: BaseDirectory.AppData })
     const parsed = JSON.parse(raw) as NotificationRecord[]
-    records.value = Array.isArray(parsed) ? parsed.slice(0, LIMIT) : []
+    const list = Array.isArray(parsed) ? parsed : []
+    const kept = pruneByRetention(list)
+    prunedOnLoad = kept.length !== list.length
+    records.value = kept
   } catch {
     records.value = []
   }
   loaded.value = true
+  // 启动时把过期记录同步落盘，避免文件里长期残留
+  if (prunedOnLoad) save()
 }
 
 async function save() {
@@ -70,7 +97,7 @@ async function save() {
 
 export function addRecord(kind: 'focus-done' | 'break-done' | 'task-reminder', detail?: string) {
   const labels = KIND_LABELS[kind]
-  records.value = [
+  records.value = pruneByRetention([
     {
       id: `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
       kind,
@@ -80,7 +107,7 @@ export function addRecord(kind: 'focus-done' | 'break-done' | 'task-reminder', d
       read: false,
     },
     ...records.value,
-  ].slice(0, LIMIT)
+  ])
   save()
 }
 
@@ -105,7 +132,7 @@ function addSystemRecord(p: SystemNotificationPayload) {
     app: appName || undefined,
     aumid: p.aumid || undefined,
   }
-  records.value = [record, ...records.value].slice(0, LIMIT)
+  records.value = pruneByRetention([record, ...records.value])
   save()
 }
 

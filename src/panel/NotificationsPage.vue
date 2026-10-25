@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onActivated, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { useNotifications, formatNotifTime } from '../composables/useNotifications'
+import {
+  useNotifications,
+  formatNotifTime,
+  pruneExpiredRecords,
+  type NotificationRecord,
+} from '../composables/useNotifications'
 import BackButton from './BackButton.vue'
 
 defineEmits<{ back: [] }>()
@@ -15,6 +20,25 @@ const notifGroups = computed(() =>
     { key: 'focus', title: '专注提醒', items: records.value.filter(r => r.kind !== 'system') },
   ].filter(group => group.items.length > 0),
 )
+
+// 每组默认只展示前 7 条，其余折叠
+const GROUP_VISIBLE_LIMIT = 7
+const expandedGroups = ref<Record<string, boolean>>({})
+
+function isGroupExpanded(key: string): boolean {
+  return Boolean(expandedGroups.value[key])
+}
+
+function toggleGroup(key: string) {
+  expandedGroups.value = {
+    ...expandedGroups.value,
+    [key]: !expandedGroups.value[key],
+  }
+}
+
+function groupVisibleItems(group: { key: string; items: NotificationRecord[] }): NotificationRecord[] {
+  return isGroupExpanded(group.key) ? group.items : group.items.slice(0, GROUP_VISIBLE_LIMIT)
+}
 
 // ---- 快捷设置：系统音量 ----
 
@@ -64,7 +88,11 @@ async function toggleMute() {
   }
 }
 
-onMounted(refreshVolume)
+onMounted(() => {
+  refreshVolume()
+  pruneExpiredRecords()
+})
+onActivated(pruneExpiredRecords)
 </script>
 
 <template>
@@ -117,7 +145,7 @@ onMounted(refreshVolume)
           <span class="group-count">{{ group.items.length }}</span>
         </div>
         <div class="notif-list">
-          <div v-for="r in group.items" :key="r.id" class="notif-item" :class="{ unread: !r.read }">
+          <div v-for="r in groupVisibleItems(group)" :key="r.id" class="notif-item" :class="{ unread: !r.read }">
             <div class="notif-dot" />
             <div class="notif-body">
               <div class="notif-line">
@@ -129,6 +157,14 @@ onMounted(refreshVolume)
             </div>
           </div>
         </div>
+        <button
+          v-if="group.items.length > GROUP_VISIBLE_LIMIT"
+          type="button"
+          class="group-more"
+          @click="toggleGroup(group.key)"
+        >
+          {{ isGroupExpanded(group.key) ? '收起' : `展开剩余 ${group.items.length - GROUP_VISIBLE_LIMIT} 条` }}
+        </button>
       </section>
     </div>
     <div v-else class="empty">还没有通知，完成番茄或收到系统通知后会记录在这里</div>
@@ -342,6 +378,26 @@ onMounted(refreshVolume)
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.group-more {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.group-more:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .notif-item {

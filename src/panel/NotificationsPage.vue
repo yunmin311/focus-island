@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useNotifications, formatNotifTime } from '../composables/useNotifications'
 import BackButton from './BackButton.vue'
@@ -7,6 +7,14 @@ import BackButton from './BackButton.vue'
 defineEmits<{ back: [] }>()
 
 const { records, unreadCount, markAllRead, clearAll } = useNotifications()
+
+// 系统通知与番茄钟/任务提醒分栏展示
+const notifGroups = computed(() =>
+  [
+    { key: 'system', title: '系统通知', items: records.value.filter(r => r.kind === 'system') },
+    { key: 'focus', title: '专注提醒', items: records.value.filter(r => r.kind !== 'system') },
+  ].filter(group => group.items.length > 0),
+)
 
 // ---- 快捷设置：系统音量 ----
 
@@ -102,20 +110,28 @@ onMounted(refreshVolume)
       <span class="section-title">通知记录</span>
       <button v-if="unreadCount" class="text-btn" @click="markAllRead">全部已读 ({{ unreadCount }})</button>
     </div>
-    <div v-if="records.length" class="notif-list">
-      <div v-for="r in records" :key="r.id" class="notif-item" :class="{ unread: !r.read }">
-        <div class="notif-dot" />
-        <div class="notif-body">
-          <div class="notif-line">
-            <span v-if="r.kind === 'system' && r.app" class="notif-app">{{ r.app }}</span>
-            <span class="notif-title">{{ r.title }}</span>
-            <span class="notif-time">{{ formatNotifTime(r.time) }}</span>
-          </div>
-          <div class="notif-detail">{{ r.detail }}</div>
+    <div v-if="records.length" class="notif-scroll">
+      <section v-for="group in notifGroups" :key="group.key" class="notif-group">
+        <div class="group-head">
+          <span class="group-title">{{ group.title }}</span>
+          <span class="group-count">{{ group.items.length }}</span>
         </div>
-      </div>
+        <div class="notif-list">
+          <div v-for="r in group.items" :key="r.id" class="notif-item" :class="{ unread: !r.read }">
+            <div class="notif-dot" />
+            <div class="notif-body">
+              <div class="notif-line">
+                <span v-if="r.kind === 'system' && r.app" class="notif-app">{{ r.app }}</span>
+                <span class="notif-title">{{ r.title }}</span>
+                <span class="notif-time">{{ formatNotifTime(r.time) }}</span>
+              </div>
+              <div class="notif-detail">{{ r.detail }}</div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-    <div v-else class="empty">还没有通知，完成一个番茄后会记录在这里</div>
+    <div v-else class="empty">还没有通知，完成番茄或收到系统通知后会记录在这里</div>
   </div>
 </template>
 
@@ -271,26 +287,61 @@ onMounted(refreshVolume)
   margin-bottom: 0;
 }
 
-.notif-list {
+.notif-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 14px;
 }
 
-.notif-list::-webkit-scrollbar {
+.notif-scroll::-webkit-scrollbar {
   width: 4px;
 }
 
-.notif-list::-webkit-scrollbar-track {
+.notif-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.notif-list::-webkit-scrollbar-thumb {
+.notif-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 2px;
+}
+
+.notif-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 6px;
+}
+
+.group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.3px;
+}
+
+.group-count {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .notif-item {

@@ -18,7 +18,7 @@ export type IslandDisplayMode = 'resident' | 'dock' | 'hidden'
 
 export type SystemNotificationMirrorMode = 'all' | 'selected'
 
-export type EmailProvider = 'qq' | '163' | 'gmail'
+export type EmailProvider = 'qq' | '163' | '126' | 'gmail' | 'outlook' | 'custom'
 
 export interface Settings {
   islandOpacity: number      // 灵动岛透明度 0~0.7，值越大越透明，CSS alpha = 1 - value
@@ -39,10 +39,12 @@ export interface Settings {
   systemNotificationMirrorMode: SystemNotificationMirrorMode // all=全部（可屏蔽）；selected=只镜像允许列表
   systemNotificationMutedApps: string[] // 全部模式下不镜像的来源（应用名或 AUMID）
   systemNotificationAllowedApps: string[] // 只镜像模式下允许的来源（应用名或 AUMID）
+  systemNotificationKnownSources: string[] // 自动/探针发现的来源，持久保留
   systemNotificationSilentInFocus: boolean // 番茄专注运行中只记录、不弹岛内 peek
   emailEnabled: boolean        // 邮件提醒开关
-  emailProvider: EmailProvider // QQ / 163 / Gmail
+  emailProvider: EmailProvider // QQ / 163 / 126 / Gmail / Outlook / 自定义
   emailAddress: string         // 邮箱地址（授权码存 Windows 凭据管理器）
+  emailImapHost: string        // 自定义邮箱的 IMAP 服务器
 }
 
 export const presetThemes: ThemePreset[] = [
@@ -74,10 +76,12 @@ const DEFAULT_SETTINGS: Settings = {
   systemNotificationMirrorMode: 'all',
   systemNotificationMutedApps: [],
   systemNotificationAllowedApps: [],
+  systemNotificationKnownSources: [],
   systemNotificationSilentInFocus: true,
   emailEnabled: false,
   emailProvider: 'qq',
   emailAddress: '',
+  emailImapHost: '',
 }
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
@@ -118,6 +122,16 @@ export function shouldMirrorSystemNotification(app: string, aumid: string): bool
 
   const muted = settings.value.systemNotificationMutedApps ?? []
   return !muted.some(matches)
+}
+
+/** 记住探针/事件里出现过的系统通知来源，供设置页长期展示 */
+export function rememberSystemNotificationSource(app: string, aumid: string) {
+  if (!settings.value.systemNotificationMirror) return
+  const name = (app || aumid || '').trim()
+  if (!name) return
+  const list = settings.value.systemNotificationKnownSources ?? []
+  if (list.some(entry => entry.toLowerCase() === name.toLowerCase())) return
+  settings.value.systemNotificationKnownSources = [...list, name].slice(-80)
 }
 
 function onSystemSchemeChange() {

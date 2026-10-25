@@ -1416,6 +1416,7 @@ struct EmailConfig {
     enabled: bool,
     provider: String,
     address: String,
+    custom_host: String,
 }
 
 #[cfg(target_os = "windows")]
@@ -1432,13 +1433,23 @@ struct EmailNotificationEvent {
 type ImapSession = imap::Session<native_tls::TlsStream<std::net::TcpStream>>;
 
 #[cfg(target_os = "windows")]
-fn email_imap_host(provider: &str) -> Option<&'static str> {
-    match provider {
-        "qq" => Some("imap.qq.com"),
-        "163" => Some("imap.163.com"),
-        "gmail" => Some("imap.gmail.com"),
-        _ => None,
-    }
+fn email_imap_host(provider: &str, custom_host: &str) -> Option<String> {
+    let host = match provider {
+        "qq" => "imap.qq.com",
+        "163" => "imap.163.com",
+        "126" => "imap.126.com",
+        "gmail" => "imap.gmail.com",
+        "outlook" => "outlook.office365.com",
+        "custom" => {
+            let host = custom_host.trim();
+            if host.is_empty() {
+                return None;
+            }
+            return Some(host.to_string());
+        }
+        _ => return None,
+    };
+    Some(host.to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -1544,6 +1555,12 @@ fn read_email_config<R: Runtime>(app: &AppHandle<R>) -> Option<EmailConfig> {
             .to_string(),
         address: value
             .get("emailAddress")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string(),
+        custom_host: value
+            .get("emailImapHost")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .trim()
@@ -1667,16 +1684,17 @@ fn run_email_imap_session<R: Runtime>(
     seen: &mut std::collections::HashSet<u32>,
     seeded: &mut bool,
 ) -> Result<(), String> {
-    let host = email_imap_host(&config.provider).ok_or_else(|| "不支持的邮箱服务商".to_string())?;
+    let host = email_imap_host(&config.provider, &config.custom_host)
+        .ok_or_else(|| "不支持的邮箱服务商或未填写服务器".to_string())?;
     let tls = native_tls::TlsConnector::new().map_err(|e| format!("TLS 初始化失败: {e}"))?;
-    let client = imap::connect((host, 993), host, &tls)
+    let client = imap::connect((host.as_str(), 993), host.as_str(), &tls)
         .map_err(|e| format!("连接 {host} 失败: {e}"))?;
     let mut session = client
         .login(&config.address, password)
         .map_err(|e| format!("登录失败: {}", e.0))?;
 
-    // 网易邮箱（163/QQ）要求客户端先发送 ID 命令
-    if config.provider == "163" || config.provider == "qq" {
+    // 网易邮箱（163/126/QQ）要求客户端先发送 ID 命令
+    if config.provider == "163" || config.provider == "126" || config.provider == "qq" {
         let _ = session
             .run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.9.0\")");
     }
@@ -1768,7 +1786,11 @@ fn start_email_watcher<R: Runtime>(app: AppHandle<R>) {
 }
 
 #[cfg(target_os = "windows")]
-fn test_email_connection_blocking(provider: &str, email: &str) -> Result<String, String> {
+fn test_email_connection_blocking(
+    provider: &str,
+    email: &str,
+    custom_host: &str,
+) -> Result<String, String> {
     let email = email.trim();
     if email.is_empty() {
         return Err("请先填写邮箱地址".into());
@@ -1779,14 +1801,15 @@ fn test_email_connection_blocking(provider: &str, email: &str) -> Result<String,
     if !stored_user.eq_ignore_ascii_case(email) {
         return Err("授权码与当前邮箱不匹配，请重新保存".into());
     }
-    let host = email_imap_host(provider).ok_or_else(|| "不支持的邮箱服务商".to_string())?;
+    let host = email_imap_host(provider, custom_host)
+        .ok_or_else(|| "不支持的邮箱服务商或未填写服务器".to_string())?;
     let tls = native_tls::TlsConnector::new().map_err(|e| format!("TLS 初始化失败: {e}"))?;
-    let client = imap::connect((host, 993), host, &tls)
+    let client = imap::connect((host.as_str(), 993), host.as_str(), &tls)
         .map_err(|e| format!("连接 {host} 失败: {e}"))?;
     let mut session = client
         .login(email, &password)
         .map_err(|e| format!("登录失败: {}", e.0))?;
-    if provider == "163" || provider == "qq" {
+    if provider == "163" || provider == "126" || provider == "qq" {
         let _ = session
             .run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.9.0\")");
     }
@@ -1824,12 +1847,105 @@ fn delete_email_credential() -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-async fn test_email_connection(provider: String, email: String) -> Result<String, String> {
+async fn test_email_connection(
+    provider: String,
+    email: String,
+    host: String,
+) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        test_email_connection_blocking(&provider, &email)
+        test_email_connection_blocking(&provider, &email, &host)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[cfg(target_os = "windows")]
+#[derive(serde::Serialize)]
+struct NotificationSourceInfo {
+    app: String,
+    aumid: String,
+}
+
+#[cfg(target_os = "windows")]
+fn probe_notification_sources_blocking() -> Result<Vec<NotificationSourceInfo>, String> {
+    use windows::UI::Notifications::Management::{
+        UserNotificationListener, UserNotificationListenerAccessStatus,
+    };
+    use windows::UI::Notifications::NotificationKinds;
+
+    unsafe {
+        let _ = windows::Win32::System::Com::CoInitializeEx(
+            None,
+            windows::Win32::System::Com::COINIT_MULTITHREADED,
+        );
+    }
+
+    let listener = UserNotificationListener::Current().map_err(|e| e.to_string())?;
+    let mut status = listener.GetAccessStatus().map_err(|e| e.to_string())?;
+    if status != UserNotificationListenerAccessStatus::Allowed {
+        status = listener
+            .RequestAccessAsync()
+            .and_then(|op| op.get())
+            .map_err(|e| e.to_string())?;
+    }
+    if status != UserNotificationListenerAccessStatus::Allowed {
+        return Err("没有通知读取权限".into());
+    }
+
+    let items = listener
+        .GetNotificationsAsync(NotificationKinds::Toast)
+        .and_then(|op| op.get())
+        .map_err(|e| e.to_string())?;
+
+    let mut seen: std::collections::HashSet<(String, String)> =
+        std::collections::HashSet::new();
+    let mut sources = Vec::new();
+    for index in 0..items.Size().unwrap_or(0) {
+        let Ok(notification) = items.GetAt(index) else {
+            continue;
+        };
+        let event = read_system_notification_event(&notification);
+        if event.aumid.to_lowercase().contains("com.focus-island") {
+            continue;
+        }
+        let app = event.app.trim().to_string();
+        if app.is_empty() {
+            continue;
+        }
+        if seen.insert((app.clone(), event.aumid.clone())) {
+            sources.push(NotificationSourceInfo {
+                app,
+                aumid: event.aumid,
+            });
+        }
+    }
+
+    sources.sort_by(|a, b| a.app.to_lowercase().cmp(&b.app.to_lowercase()));
+    Ok(sources)
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+async fn probe_notification_sources() -> Result<Vec<NotificationSourceInfo>, String> {
+    tauri::async_runtime::spawn_blocking(probe_notification_sources_blocking)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+async fn test_email_connection(
+    _provider: String,
+    _email: String,
+    _host: String,
+) -> Result<String, String> {
+    Err("仅支持 Windows".into())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+async fn probe_notification_sources() -> Result<Vec<serde_json::Value>, String> {
+    Err("仅支持 Windows".into())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1915,6 +2031,7 @@ pub fn run() {
             email_credential_status,
             delete_email_credential,
             test_email_connection,
+            probe_notification_sources,
         ])
         .setup(|app| {
             // 点击刘海判定依赖真实点击坐标；钩子只需要安装一次

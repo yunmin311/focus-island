@@ -23,13 +23,56 @@ const mirrorSources = computed(() => {
     const key = value.trim()
     if (key && !keys.includes(key)) keys.push(key)
   }
+  for (const key of settings.value.systemNotificationKnownSources ?? []) push(key)
   for (const record of records.value) {
     if (record.kind === 'system') push(record.app || record.aumid || '')
   }
   for (const key of settings.value.systemNotificationMutedApps ?? []) push(key)
   for (const key of settings.value.systemNotificationAllowedApps ?? []) push(key)
-  return keys.slice(0, 10)
+  return keys.slice(0, 60)
 })
+
+const sourcesExpanded = ref(false)
+const sourcesProbing = ref(false)
+const sourcesStatus = ref('')
+
+const sourceSummary = computed(() => {
+  const total = mirrorSources.value.length
+  if (total === 0) return '暂无来源'
+  if ((settings.value.systemNotificationMirrorMode ?? 'all') === 'selected') {
+    const allowed = (settings.value.systemNotificationAllowedApps ?? []).length
+    return `${total} 个来源 · ${allowed} 个已允许`
+  }
+  const muted = (settings.value.systemNotificationMutedApps ?? []).length
+  return `${total} 个来源 · ${muted} 个已屏蔽`
+})
+
+async function probeNotificationSources() {
+  sourcesProbing.value = true
+  sourcesStatus.value = '正在检测...'
+  try {
+    const sources = await invoke<Array<{ app: string; aumid: string }>>('probe_notification_sources')
+    const names = sources.map(source => (source.app || source.aumid || '').trim()).filter(Boolean)
+    const existing = settings.value.systemNotificationKnownSources ?? []
+    const added = names.filter(
+      name => !existing.some(entry => entry.toLowerCase() === name.toLowerCase()),
+    )
+    const merged = [...existing]
+    for (const name of names) {
+      if (!merged.some(entry => entry.toLowerCase() === name.toLowerCase())) {
+        merged.push(name)
+      }
+    }
+    settings.value.systemNotificationKnownSources = merged.slice(-80)
+    sourcesStatus.value = names.length
+      ? `检测到 ${names.length} 个来源${added.length ? `，新增 ${added.length} 个` : ''}`
+      : '当前通知中心没有可检测的来源'
+  } catch (e) {
+    sourcesStatus.value = typeof e === 'string' ? e : '检测来源失败'
+  } finally {
+    sourcesProbing.value = false
+  }
+}
 
 function isSourceMuted(source: string): boolean {
   const list = settings.value.systemNotificationMutedApps ?? []
@@ -68,7 +111,10 @@ function toggleSource(source: string) {
 const emailProviders: Array<{ id: EmailProvider; label: string }> = [
   { id: 'qq', label: 'QQ' },
   { id: '163', label: '163' },
+  { id: '126', label: '126' },
   { id: 'gmail', label: 'Gmail' },
+  { id: 'outlook', label: 'Outlook' },
+  { id: 'custom', label: '自定义' },
 ]
 const emailAuthCode = ref('')
 const emailSaving = ref(false)
@@ -86,7 +132,24 @@ const emailSummary = computed(() => {
   const address = settings.value.emailAddress.trim()
   if (!address) return '未配置'
   const credential = emailHasCredential.value ? '已保存授权码' : '未保存授权码'
+  if (settings.value.emailProvider === 'custom') {
+    const host = settings.value.emailImapHost.trim() || '未填写服务器'
+    return `${host} · ${address} · ${credential}`
+  }
   return `${emailProviderLabel.value} · ${address} · ${credential}`
+})
+
+const emailAuthPlaceholder = computed(() => {
+  switch (settings.value.emailProvider) {
+    case 'gmail':
+      return 'Gmail 应用专用密码'
+    case 'outlook':
+      return 'Outlook 应用专用密码'
+    case 'custom':
+      return '授权码 / 应用专用密码'
+    default:
+      return '授权码（不是登录密码）'
+  }
 })
 
 watch(
@@ -141,6 +204,11 @@ async function testEmailConnection() {
     emailStatusOk.value = false
     return
   }
+  if (settings.value.emailProvider === 'custom' && !settings.value.emailImapHost.trim()) {
+    emailStatus.value = '请填写 IMAP 服务器'
+    emailStatusOk.value = false
+    return
+  }
   emailTesting.value = true
   emailStatus.value = '正在连接...'
   emailStatusOk.value = null
@@ -148,6 +216,7 @@ async function testEmailConnection() {
     const message = await invoke<string>('test_email_connection', {
       provider: settings.value.emailProvider,
       email,
+      host: settings.value.emailProvider === 'custom' ? settings.value.emailImapHost.trim() : '',
     })
     emailStatus.value = message
     emailStatusOk.value = true
@@ -533,13 +602,44 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
-      <div
-        v-if="settings.systemNotificationMirror && (mirrorSources.length > 0 || (settings.systemNotificationMirrorMode ?? 'all') === 'selected')"
-        class="mirror-sources"
+      <button
+        v-if="settings.systemNotificationMirror"
+        type="button"
+        class="collapsible-row row-spaced"
+        @click="sourcesExpanded = !sourcesExpanded"
       >
-        <span class="mirror-hint">
-          {{ (settings.systemNotificationMirrorMode ?? 'all') === 'all' ? '点按来源可屏蔽' : '点按来源加入允许列表' }}
+        <span class="update-copy">
+          <span class="update-label">通知来源</span>
+          <span class="update-hint">{{ sourceSummary }}</span>
         </span>
+        <svg
+          class="collapsible-chevron"
+          :class="{ open: sourcesExpanded }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <div v-if="settings.systemNotificationMirror && sourcesExpanded" class="mirror-sources">
+        <div class="mirror-sources-head">
+          <span class="update-hint">
+            {{ (settings.systemNotificationMirrorMode ?? 'all') === 'all' ? '点按来源可屏蔽' : '点按来源加入允许列表' }}
+          </span>
+          <button
+            type="button"
+            class="source-probe-btn"
+            :disabled="sourcesProbing"
+            @click="probeNotificationSources"
+          >
+            {{ sourcesProbing ? '检测中...' : '检测来源' }}
+          </button>
+        </div>
+        <span v-if="sourcesStatus" class="source-status">{{ sourcesStatus }}</span>
         <span
           v-if="(settings.systemNotificationMirrorMode ?? 'all') === 'selected' && !(settings.systemNotificationAllowedApps ?? []).length"
           class="mirror-empty"
@@ -561,6 +661,9 @@ onUnmounted(() => {
             {{ source }}
           </button>
         </div>
+        <span v-if="!mirrorSources.length" class="mirror-empty">
+          还没有来源，收到通知或点「检测来源」后会出现
+        </span>
       </div>
       <div class="update-toggle-row row-spaced">
         <div class="update-copy">
@@ -587,13 +690,13 @@ onUnmounted(() => {
           <span class="switch-track"></span>
         </label>
       </div>
-      <button type="button" class="email-config-row row-spaced" @click="emailExpanded = !emailExpanded">
+      <button type="button" class="collapsible-row row-spaced" @click="emailExpanded = !emailExpanded">
         <span class="update-copy">
           <span class="update-label">账号与授权码</span>
           <span class="update-hint">{{ emailSummary }}</span>
         </span>
         <svg
-          class="email-config-chevron"
+          class="collapsible-chevron"
           :class="{ open: emailExpanded }"
           viewBox="0 0 24 24"
           fill="none"
@@ -606,18 +709,18 @@ onUnmounted(() => {
         </svg>
       </button>
       <div v-if="emailExpanded" class="email-form">
-        <div class="mode-toggle email-provider-toggle">
-          <button
-            v-for="provider in emailProviders"
-            :key="provider.id"
-            type="button"
-            class="mode-btn"
-            :class="{ active: settings.emailProvider === provider.id }"
-            @click="settings.emailProvider = provider.id"
-          >
+        <select v-model="settings.emailProvider" class="email-input email-select">
+          <option v-for="provider in emailProviders" :key="provider.id" :value="provider.id">
             {{ provider.label }}
-          </button>
-        </div>
+          </option>
+        </select>
+        <input
+          v-if="settings.emailProvider === 'custom'"
+          v-model="settings.emailImapHost"
+          class="email-input"
+          placeholder="IMAP 服务器，例如 imap.example.com"
+          autocomplete="off"
+        />
         <input
           v-model="settings.emailAddress"
           class="email-input"
@@ -630,7 +733,7 @@ onUnmounted(() => {
           v-model="emailAuthCode"
           class="email-input"
           type="password"
-          :placeholder="settings.emailProvider === 'gmail' ? 'Gmail 应用专用密码' : '授权码（不是登录密码）'"
+          :placeholder="emailAuthPlaceholder"
           autocomplete="off"
         />
         <div class="email-actions">
@@ -653,7 +756,7 @@ onUnmounted(() => {
           {{ emailStatus || (emailHasCredential ? '授权码已保存在本机' : '尚未保存授权码') }}
         </span>
         <span class="email-hint">
-          QQ / 163 需开启 IMAP 并使用授权码；Gmail 使用应用专用密码。授权码只保存在本机 Windows 凭据管理器，不写入设置文件。
+          QQ / 163 / 126 需开启 IMAP 并使用授权码；Gmail / Outlook 使用应用专用密码（若可用）；其他邮箱选「自定义」并填写 IMAP 服务器。授权码只保存在本机 Windows 凭据管理器。
         </span>
       </div>
     </div>
@@ -1042,6 +1145,41 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
+.mirror-sources-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.source-probe-btn {
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--focus-color) 70%, #fff);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 2px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.source-probe-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.source-probe-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.source-status {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
 .row-spaced {
   margin-top: 8px;
 }
@@ -1059,11 +1197,6 @@ onUnmounted(() => {
   margin-top: 4px;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.42);
-}
-
-.mirror-hint {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
 }
 
 .mirror-chips {
@@ -1117,7 +1250,7 @@ onUnmounted(() => {
   color: color-mix(in srgb, var(--focus-color) 95%, #fff);
 }
 
-.email-config-row {
+.collapsible-row {
   width: 100%;
   display: flex;
   align-items: center;
@@ -1132,11 +1265,11 @@ onUnmounted(() => {
   font-family: inherit;
 }
 
-.email-config-row:hover .update-label {
+.collapsible-row:hover .update-label {
   color: #fff;
 }
 
-.email-config-chevron {
+.collapsible-chevron {
   width: 14px;
   height: 14px;
   color: rgba(255, 255, 255, 0.35);
@@ -1144,7 +1277,7 @@ onUnmounted(() => {
   transition: transform 0.2s ease;
 }
 
-.email-config-chevron.open {
+.collapsible-chevron.open {
   transform: rotate(180deg);
 }
 
@@ -1155,8 +1288,8 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-.email-provider-toggle {
-  width: fit-content;
+.email-select {
+  cursor: pointer;
 }
 
 .email-input {

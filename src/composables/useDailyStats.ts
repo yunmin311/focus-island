@@ -102,6 +102,27 @@ export function useDailyStats() {
     }
   }
 
+  // 取消勾选时回退当天的完成记录；只在当天明细里确实记过该标题时才回退，
+  // 避免影响历史统计（旧版本没有 completedTitles 的日期不会被误减）。
+  function unrecordTaskCompleted(title?: string, date?: string) {
+    const targetDate = date ?? getDateString()
+    const stat = getStatByDate(targetDate)
+    if (!stat || !stat.completedTitles) return
+    const idx = title ? stat.completedTitles.lastIndexOf(title) : -1
+    if (idx < 0) return
+    stat.completedTitles.splice(idx, 1)
+    if (stat.tasksCompleted > 0) stat.tasksCompleted--
+    // 回退后当天没有任何数据时移除空记录，保持统计文件干净
+    if (
+      stat.tasksCompleted === 0 &&
+      stat.pomodoros === 0 &&
+      stat.focusMinutes === 0 &&
+      stat.completedTitles.length === 0
+    ) {
+      dailyStats.value = dailyStats.value.filter(s => s !== stat)
+    }
+  }
+
   function getStatsInRange(startDate: Date, endDate: Date): DailyStat[] {
     const start = getDateString(startDate)
     const end = getDateString(endDate)
@@ -161,6 +182,7 @@ export function useDailyStats() {
     allTimeStats,
     recordPomodoro,
     recordTaskCompleted,
+    unrecordTaskCompleted,
     getStatsInRange,
     getMonthStats,
     summarizeStats,

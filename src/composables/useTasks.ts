@@ -234,7 +234,7 @@ listen<string>('tasks-updated', (event) => {
 
 export function useTasks() {
   ensureLoaded()
-  const { recordTaskCompleted, todayStat } = useDailyStats()
+  const { recordTaskCompleted, unrecordTaskCompleted, todayStat } = useDailyStats()
 
   function addTask(
     title: string,
@@ -331,6 +331,7 @@ export function useTasks() {
       const idx = dates.indexOf(today)
       if (idx >= 0) {
         dates.splice(idx, 1)
+        unrecordTaskCompleted(task.title, today)
       } else {
         dates.push(today)
         recordTaskCompleted(task.title)
@@ -339,14 +340,21 @@ export function useTasks() {
       return
     }
 
-    const wasCompleted = task.completed
-    task.completed = !task.completed
     if (task.completed) {
-      task.priority = 0
-    } else {
+      // 取消完成：按最后一次完成日期回退统计
+      const dates = task.completionDates ?? []
+      const completedDate = dates.length
+        ? dates[dates.length - 1]
+        : toDateStr(new Date(task.updatedAt))
+      if (dates.length) task.completionDates = dates.slice(0, -1)
+      task.completed = false
       task.priority = 1 as TaskPriority
-    }
-    if (!wasCompleted && task.completed) {
+      unrecordTaskCompleted(task.title, completedDate)
+    } else {
+      task.completed = true
+      task.priority = 0
+      const today = toDateStr(new Date())
+      task.completionDates = [...(task.completionDates ?? []), today]
       recordTaskCompleted(task.title)
     }
     task.updatedAt = Date.now()

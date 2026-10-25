@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import { readTextFile, writeTextFile, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs'
 import { shouldMirrorSystemNotification } from './useSettings'
 
-export type NotificationKind = 'focus-done' | 'break-done' | 'system' | 'task-reminder'
+export type NotificationKind = 'focus-done' | 'break-done' | 'system' | 'task-reminder' | 'email'
 
 export interface NotificationRecord {
   id: string
@@ -28,6 +28,15 @@ export interface SystemNotificationPayload {
   created_ms: number
 }
 
+/** Rust 端 email-notification 事件的载荷 */
+export interface EmailNotificationPayload {
+  uid: number
+  from: string
+  subject: string
+  date: string
+  provider: string
+}
+
 const NOTIF_FILE = 'focus-island/notifications.json'
 const LIMIT = 200
 // 系统通知按系统逻辑短期缓存；专注提醒保留更久
@@ -38,6 +47,7 @@ const records = ref<NotificationRecord[]>([])
 const loaded = ref(false)
 let listening = false
 const systemKeys = new Set<string>()
+const emailKeys = new Set<string>()
 
 function pruneByRetention(list: NotificationRecord[]): NotificationRecord[] {
   const now = Date.now()
@@ -136,6 +146,25 @@ function addSystemRecord(p: SystemNotificationPayload) {
   save()
 }
 
+function addEmailRecord(p: EmailNotificationPayload) {
+  const from = (p.from || '').trim() || '未知发件人'
+  const key = `${p.uid}-${p.date}`
+  if (emailKeys.has(key)) return
+  emailKeys.add(key)
+  const parsed = Date.parse(p.date)
+  const record: NotificationRecord = {
+    id: `email-${key}`,
+    kind: 'email',
+    title: (p.subject || '').trim() || '(无主题)',
+    detail: from,
+    time: Number.isFinite(parsed) ? parsed : Date.now(),
+    read: false,
+    app: from,
+  }
+  records.value = pruneByRetention([record, ...records.value])
+  save()
+}
+
 function markAllRead() {
   records.value = records.value.map(r => (r.read ? r : { ...r, read: true }))
   save()
@@ -167,6 +196,10 @@ export function useNotifications() {
     // Windows 通知中心的系统通知镜像
     void listen<SystemNotificationPayload>('system-notification', ({ payload }) => {
       if (payload) addSystemRecord(payload)
+    })
+    // 邮箱 IMAP 新邮件
+    void listen<EmailNotificationPayload>('email-notification', ({ payload }) => {
+      if (payload) addEmailRecord(payload)
     })
   }
   return { records, unreadCount, markAllRead, clearAll }

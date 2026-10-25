@@ -6,6 +6,7 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime, WebviewWindow, WindowEvent,
 };
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 #[cfg(target_os = "macos")]
 use core_graphics::event::CGEvent;
@@ -1402,6 +1403,459 @@ fn start_system_notification_mirror<R: Runtime>(app: AppHandle<R>) {
     }
 }
 
+// ==== 邮件通知（Windows）：IMAP 只取发件人/主题/时间 ====
+// 凭据存 Windows 凭据管理器；QQ/163 用授权码，Gmail 用应用专用密码。
+// 默认 IDLE 实时监听，服务器不支持时退化为 60s 轮询。
+
+#[cfg(target_os = "windows")]
+const EMAIL_CRED_TARGET: &str = "FocusIsland/Email";
+
+#[cfg(target_os = "windows")]
+#[derive(Clone, PartialEq)]
+struct EmailConfig {
+    enabled: bool,
+    provider: String,
+    address: String,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Clone, serde::Serialize)]
+struct EmailNotificationEvent {
+    uid: u32,
+    from: String,
+    subject: String,
+    date: String,
+    provider: String,
+}
+
+#[cfg(target_os = "windows")]
+type ImapSession = imap::Session<native_tls::TlsStream<std::net::TcpStream>>;
+
+#[cfg(target_os = "windows")]
+fn email_imap_host(provider: &str) -> Option<&'static str> {
+    match provider {
+        "qq" => Some("imap.qq.com"),
+        "163" => Some("imap.163.com"),
+        "gmail" => Some("imap.gmail.com"),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn save_email_credential_blocking(email: &str, password: &str) -> Result<(), String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Security::Credentials::{
+        CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
+    };
+
+    let mut target: Vec<u16> = EMAIL_CRED_TARGET
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut user: Vec<u16> = email
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut blob = password.as_bytes().to_vec();
+
+    let credential = CREDENTIALW {
+        Flags: Default::default(),
+        Type: CRED_TYPE_GENERIC,
+        TargetName: PWSTR(target.as_mut_ptr()),
+        Comment: PWSTR::null(),
+        LastWritten: Default::default(),
+        CredentialBlobSize: blob.len() as u32,
+        CredentialBlob: blob.as_mut_ptr(),
+        Persist: CRED_PERSIST_LOCAL_MACHINE,
+        AttributeCount: 0,
+        Attributes: std::ptr::null_mut(),
+        TargetAlias: PWSTR::null(),
+        UserName: PWSTR(user.as_mut_ptr()),
+    };
+
+    unsafe { CredWriteW(&credential, 0) }.map_err(|e| format!("保存凭据失败: {e}"))
+}
+
+#[cfg(target_os = "windows")]
+fn read_email_credential_blocking() -> Option<(String, String)> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Security::Credentials::{
+        CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC,
+    };
+
+    let target: Vec<u16> = EMAIL_CRED_TARGET
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
+    if unsafe { CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None, &mut credential_ptr) }
+        .is_err()
+        || credential_ptr.is_null()
+    {
+        return None;
+    }
+
+    let credential = unsafe { &*credential_ptr };
+    let user = if credential.UserName.is_null() {
+        String::new()
+    } else {
+        unsafe { credential.UserName.to_string() }.unwrap_or_default()
+    };
+    let password = if credential.CredentialBlob.is_null() || credential.CredentialBlobSize == 0 {
+        String::new()
+    } else {
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                credential.CredentialBlob,
+                credential.CredentialBlobSize as usize,
+            )
+        };
+        String::from_utf8_lossy(bytes).to_string()
+    };
+    unsafe { CredFree(credential_ptr as *const _) };
+    Some((user, password))
+}
+
+#[cfg(target_os = "windows")]
+fn delete_email_credential_blocking() {
+    use windows::core::PCWSTR;
+    use windows::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
+    let target: Vec<u16> = EMAIL_CRED_TARGET
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let _ = unsafe { CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None) };
+}
+
+#[cfg(target_os = "windows")]
+fn read_email_config<R: Runtime>(app: &AppHandle<R>) -> Option<EmailConfig> {
+    let dir = app.path().app_data_dir().ok()?.join("focus-island");
+    let raw = std::fs::read_to_string(dir.join("settings.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    Some(EmailConfig {
+        enabled: value
+            .get("emailEnabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        provider: value
+            .get("emailProvider")
+            .and_then(|v| v.as_str())
+            .unwrap_or("qq")
+            .to_string(),
+        address: value
+            .get("emailAddress")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string(),
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn same_email_config<R: Runtime>(app: &AppHandle<R>, config: &EmailConfig) -> bool {
+    read_email_config(app).as_ref() == Some(config)
+}
+
+#[cfg(target_os = "windows")]
+fn extract_email_envelope(fetch: &imap::types::Fetch) -> (String, String, String) {
+    let Some(envelope) = fetch.envelope() else {
+        return ("未知发件人".into(), "(无主题)".into(), String::new());
+    };
+
+    let subject = envelope
+        .subject
+        .map(|s| String::from_utf8_lossy(s).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "(无主题)".to_string());
+
+    let from = envelope
+        .from
+        .as_ref()
+        .and_then(|list| list.first())
+        .map(|addr| {
+            let name = addr
+                .name
+                .map(|n| String::from_utf8_lossy(n).trim().to_string())
+                .unwrap_or_default();
+            if !name.is_empty() {
+                return name;
+            }
+            let mailbox = addr
+                .mailbox
+                .map(|m| String::from_utf8_lossy(m).to_string())
+                .unwrap_or_default();
+            let host = addr
+                .host
+                .map(|h| String::from_utf8_lossy(h).to_string())
+                .unwrap_or_default();
+            if mailbox.is_empty() && host.is_empty() {
+                "未知发件人".to_string()
+            } else {
+                format!("{mailbox}@{host}")
+            }
+        })
+        .unwrap_or_else(|| "未知发件人".to_string());
+
+    let date = envelope
+        .date
+        .map(|d| String::from_utf8_lossy(d).trim().to_string())
+        .unwrap_or_default();
+
+    (from, subject, date)
+}
+
+#[cfg(target_os = "windows")]
+fn fetch_new_email<R: Runtime>(
+    app: &AppHandle<R>,
+    session: &mut ImapSession,
+    seen: &mut std::collections::HashSet<u32>,
+    seeded: &mut bool,
+    provider: &str,
+) -> Result<(), String> {
+    let unread = session
+        .uid_search("UNSEEN")
+        .map_err(|e| format!("搜索未读失败: {e}"))?;
+
+    if !*seeded {
+        for uid in unread {
+            seen.insert(uid);
+        }
+        *seeded = true;
+        println!("[email] seeded {} unread", seen.len());
+        return Ok(());
+    }
+
+    let new_uids: Vec<u32> = unread
+        .iter()
+        .copied()
+        .filter(|uid| !seen.contains(uid))
+        .collect();
+    if new_uids.is_empty() {
+        return Ok(());
+    }
+
+    let uid_set = new_uids
+        .iter()
+        .map(|uid| uid.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let fetches = session
+        .uid_fetch(&uid_set, "(UID ENVELOPE INTERNALDATE)")
+        .map_err(|e| format!("获取邮件头失败: {e}"))?;
+
+    for fetch in fetches.iter() {
+        let uid = fetch.uid.unwrap_or(0);
+        seen.insert(uid);
+        let (from, subject, date) = extract_email_envelope(fetch);
+        let event = EmailNotificationEvent {
+            uid,
+            from,
+            subject,
+            date,
+            provider: provider.to_string(),
+        };
+        let _ = app.emit("email-notification", event);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn run_email_imap_session<R: Runtime>(
+    app: &AppHandle<R>,
+    config: &EmailConfig,
+    password: &str,
+    seen: &mut std::collections::HashSet<u32>,
+    seeded: &mut bool,
+) -> Result<(), String> {
+    let host = email_imap_host(&config.provider).ok_or_else(|| "不支持的邮箱服务商".to_string())?;
+    let tls = native_tls::TlsConnector::new().map_err(|e| format!("TLS 初始化失败: {e}"))?;
+    let client = imap::connect((host, 993), host, &tls)
+        .map_err(|e| format!("连接 {host} 失败: {e}"))?;
+    let mut session = client
+        .login(&config.address, password)
+        .map_err(|e| format!("登录失败: {}", e.0))?;
+
+    // 网易邮箱（163/QQ）要求客户端先发送 ID 命令
+    if config.provider == "163" || config.provider == "qq" {
+        let _ = session
+            .run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.9.0\")");
+    }
+
+    session
+        .select("INBOX")
+        .map_err(|e| format!("选择收件箱失败: {e}"))?;
+    println!("[email] connected: {} ({})", config.address, config.provider);
+
+    fetch_new_email(app, &mut session, seen, seeded, &config.provider)?;
+
+    let supports_idle = session
+        .capabilities()
+        .map(|caps| caps.has_str("IDLE"))
+        .unwrap_or(false);
+
+    if supports_idle {
+        loop {
+            let outcome = {
+                let handle = session.idle().map_err(|e| format!("IDLE 失败: {e}"))?;
+                handle
+                    .wait_with_timeout(Duration::from_secs(60))
+                    .map_err(|e| format!("IDLE 等待失败: {e}"))?
+            };
+
+            if !same_email_config(app, config) {
+                let _ = session.logout();
+                return Ok(());
+            }
+
+            if outcome == imap::extensions::idle::WaitOutcome::MailboxChanged {
+                fetch_new_email(app, &mut session, seen, seeded, &config.provider)?;
+            }
+        }
+    } else {
+        loop {
+            std::thread::sleep(Duration::from_secs(60));
+            if !same_email_config(app, config) {
+                let _ = session.logout();
+                return Ok(());
+            }
+            fetch_new_email(app, &mut session, seen, seeded, &config.provider)?;
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn start_email_watcher<R: Runtime>(app: AppHandle<R>) {
+    let spawned = std::thread::Builder::new()
+        .name("email-imap".into())
+        .spawn(move || {
+            let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+            let mut seeded = false;
+            loop {
+                let Some(config) = read_email_config(&app) else {
+                    std::thread::sleep(Duration::from_secs(10));
+                    continue;
+                };
+                if !config.enabled || config.address.is_empty() {
+                    seen.clear();
+                    seeded = false;
+                    std::thread::sleep(Duration::from_secs(10));
+                    continue;
+                }
+                let Some((stored_user, password)) = read_email_credential_blocking() else {
+                    std::thread::sleep(Duration::from_secs(30));
+                    continue;
+                };
+                if !stored_user.eq_ignore_ascii_case(&config.address) {
+                    std::thread::sleep(Duration::from_secs(30));
+                    continue;
+                }
+                if let Err(e) = run_email_imap_session(
+                    &app,
+                    &config,
+                    &password,
+                    &mut seen,
+                    &mut seeded,
+                ) {
+                    println!("[email] {e}");
+                    std::thread::sleep(Duration::from_secs(30));
+                }
+            }
+        });
+
+    if let Err(e) = spawned {
+        println!("[email] failed to start watcher: {e}");
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn test_email_connection_blocking(provider: &str, email: &str) -> Result<String, String> {
+    let email = email.trim();
+    if email.is_empty() {
+        return Err("请先填写邮箱地址".into());
+    }
+    let Some((stored_user, password)) = read_email_credential_blocking() else {
+        return Err("请先保存授权码".into());
+    };
+    if !stored_user.eq_ignore_ascii_case(email) {
+        return Err("授权码与当前邮箱不匹配，请重新保存".into());
+    }
+    let host = email_imap_host(provider).ok_or_else(|| "不支持的邮箱服务商".to_string())?;
+    let tls = native_tls::TlsConnector::new().map_err(|e| format!("TLS 初始化失败: {e}"))?;
+    let client = imap::connect((host, 993), host, &tls)
+        .map_err(|e| format!("连接 {host} 失败: {e}"))?;
+    let mut session = client
+        .login(email, &password)
+        .map_err(|e| format!("登录失败: {}", e.0))?;
+    if provider == "163" || provider == "qq" {
+        let _ = session
+            .run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.9.0\")");
+    }
+    session
+        .select("INBOX")
+        .map_err(|e| format!("收件箱不可用: {e}"))?;
+    let _ = session.logout();
+    Ok("连接成功".to_string())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn save_email_credential(email: String, password: String) -> Result<(), String> {
+    let email = email.trim();
+    if email.is_empty() || password.is_empty() {
+        return Err("请填写邮箱地址和授权码".into());
+    }
+    save_email_credential_blocking(email, &password)
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn email_credential_status(email: String) -> Result<bool, String> {
+    Ok(read_email_credential_blocking()
+        .map(|(stored_user, _)| stored_user.eq_ignore_ascii_case(email.trim()))
+        .unwrap_or(false))
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn delete_email_credential() -> Result<(), String> {
+    delete_email_credential_blocking();
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+async fn test_email_connection(provider: String, email: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        test_email_connection_blocking(&provider, &email)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn save_email_credential(_email: String, _password: String) -> Result<(), String> {
+    Err("仅支持 Windows".into())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn email_credential_status(_email: String) -> Result<bool, String> {
+    Ok(false)
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn delete_email_credential() -> Result<(), String> {
+    Err("仅支持 Windows".into())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+async fn test_email_connection(_provider: String, _email: String) -> Result<String, String> {
+    Err("仅支持 Windows".into())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1457,6 +1911,10 @@ pub fn run() {
             get_volume_state,
             set_system_volume,
             set_system_mute,
+            save_email_credential,
+            email_credential_status,
+            delete_email_credential,
+            test_email_connection,
         ])
         .setup(|app| {
             // 点击刘海判定依赖真实点击坐标；钩子只需要安装一次
@@ -1466,6 +1924,10 @@ pub fn run() {
             // 系统通知镜像：后台轮询通知中心
             #[cfg(target_os = "windows")]
             start_system_notification_mirror(app.handle().clone());
+
+            // 邮件通知：IMAP IDLE 监听收件箱
+            #[cfg(target_os = "windows")]
+            start_email_watcher(app.handle().clone());
 
             #[cfg(desktop)]
             {

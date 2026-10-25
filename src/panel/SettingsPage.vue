@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
-import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
+import { invoke } from '@tauri-apps/api/core'
+import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode, type EmailProvider } from '../composables/useSettings'
 import { useNotifications } from '../composables/useNotifications'
 import { useUpdater } from '../composables/useUpdater'
 import { useForkUpdate } from '../composables/useForkUpdate'
@@ -59,6 +60,93 @@ function toggleSource(source: string) {
     toggleSourceAllowed(source)
   } else {
     toggleSourceMute(source)
+  }
+}
+
+// ---- 邮箱通知 ----
+
+const emailProviders: Array<{ id: EmailProvider; label: string }> = [
+  { id: 'qq', label: 'QQ' },
+  { id: '163', label: '163' },
+  { id: 'gmail', label: 'Gmail' },
+]
+const emailAuthCode = ref('')
+const emailSaving = ref(false)
+const emailTesting = ref(false)
+const emailHasCredential = ref(false)
+const emailStatus = ref('')
+const emailStatusOk = ref<boolean | null>(null)
+
+async function refreshEmailCredentialStatus() {
+  const email = settings.value.emailAddress.trim()
+  if (!email) {
+    emailHasCredential.value = false
+    return
+  }
+  try {
+    emailHasCredential.value = await invoke<boolean>('email_credential_status', { email })
+  } catch {
+    emailHasCredential.value = false
+  }
+}
+
+async function saveEmailCredential() {
+  const email = settings.value.emailAddress.trim()
+  const code = emailAuthCode.value.trim()
+  if (!email || !code) {
+    emailStatus.value = '请填写邮箱地址和授权码'
+    emailStatusOk.value = false
+    return
+  }
+  emailSaving.value = true
+  try {
+    await invoke('save_email_credential', { email, password: code })
+    emailAuthCode.value = ''
+    emailHasCredential.value = true
+    emailStatus.value = '授权码已保存到 Windows 凭据管理器'
+    emailStatusOk.value = true
+  } catch (e) {
+    emailStatus.value = typeof e === 'string' ? e : '保存授权码失败'
+    emailStatusOk.value = false
+  } finally {
+    emailSaving.value = false
+  }
+}
+
+async function testEmailConnection() {
+  const email = settings.value.emailAddress.trim()
+  if (!email) {
+    emailStatus.value = '请先填写邮箱地址'
+    emailStatusOk.value = false
+    return
+  }
+  emailTesting.value = true
+  emailStatus.value = '正在连接...'
+  emailStatusOk.value = null
+  try {
+    const message = await invoke<string>('test_email_connection', {
+      provider: settings.value.emailProvider,
+      email,
+    })
+    emailStatus.value = message
+    emailStatusOk.value = true
+  } catch (e) {
+    emailStatus.value = typeof e === 'string' ? e : '连接失败'
+    emailStatusOk.value = false
+  } finally {
+    emailTesting.value = false
+  }
+}
+
+async function clearEmailCredential() {
+  try {
+    await invoke('delete_email_credential')
+    emailHasCredential.value = false
+    emailStatus.value = '已清除本机保存的授权码'
+    emailStatusOk.value = null
+  } catch (e) {
+    emailStatus.value = typeof e === 'string' ? e : '清除失败'
+    emailStatusOk.value = false
   }
 }
 
@@ -247,6 +335,7 @@ function unbindRecordListeners() {
 
 onMounted(() => {
   bindRecordListeners()
+  void refreshEmailCredentialStatus()
   if (settings.value.autoCheckUpdates) {
     void checkForkUpdate(false)
   }
@@ -254,6 +343,7 @@ onMounted(() => {
 
 onActivated(() => {
   bindRecordListeners()
+  void refreshEmailCredentialStatus()
 })
 
 onDeactivated(() => {
@@ -454,12 +544,78 @@ onUnmounted(() => {
       <div class="update-toggle-row" style="margin-top: 10px;">
         <div class="update-copy">
           <span class="update-label">专注时静默</span>
-          <span class="update-hint">番茄计时运行中，系统通知只记录到通知中心，不弹岛内提示</span>
+          <span class="update-hint">番茄计时运行中，系统通知与邮件只记录到通知中心，不弹岛内提示</span>
         </div>
         <label class="switch" aria-label="专注时静默">
           <input v-model="settings.systemNotificationSilentInFocus" type="checkbox" />
           <span class="switch-track"></span>
         </label>
+      </div>
+    </div>
+
+    <!-- 邮箱通知 -->
+    <div class="settings-section">
+      <div class="section-title">邮箱通知</div>
+      <div class="update-toggle-row">
+        <div class="update-copy">
+          <span class="update-label">邮件提醒</span>
+          <span class="update-hint">只取发件人、主题和时间；专注计时期间只记录、不弹提示</span>
+        </div>
+        <label class="switch" aria-label="邮件提醒">
+          <input v-model="settings.emailEnabled" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="email-form">
+        <div class="mode-toggle email-provider-toggle">
+          <button
+            v-for="provider in emailProviders"
+            :key="provider.id"
+            type="button"
+            class="mode-btn"
+            :class="{ active: settings.emailProvider === provider.id }"
+            @click="settings.emailProvider = provider.id"
+          >
+            {{ provider.label }}
+          </button>
+        </div>
+        <input
+          v-model="settings.emailAddress"
+          class="email-input"
+          type="email"
+          placeholder="邮箱地址"
+          autocomplete="off"
+          @blur="refreshEmailCredentialStatus"
+        />
+        <input
+          v-model="emailAuthCode"
+          class="email-input"
+          type="password"
+          :placeholder="settings.emailProvider === 'gmail' ? 'Gmail 应用专用密码' : '授权码（不是登录密码）'"
+          autocomplete="off"
+        />
+        <div class="email-actions">
+          <button type="button" class="update-btn primary" :disabled="emailSaving" @click="saveEmailCredential">
+            {{ emailSaving ? '保存中...' : '保存授权码' }}
+          </button>
+          <button
+            type="button"
+            class="update-btn"
+            :disabled="emailTesting || !emailHasCredential"
+            @click="testEmailConnection"
+          >
+            {{ emailTesting ? '测试中...' : '测试连接' }}
+          </button>
+          <button v-if="emailHasCredential" type="button" class="update-btn" @click="clearEmailCredential">
+            清除
+          </button>
+        </div>
+        <span class="email-status" :class="{ error: emailStatusOk === false, success: emailStatusOk === true }">
+          {{ emailStatus || (emailHasCredential ? '授权码已保存在本机' : '尚未保存授权码') }}
+        </span>
+        <span class="email-hint">
+          QQ / 163 需开启 IMAP 并使用授权码；Gmail 使用应用专用密码。授权码只保存在本机 Windows 凭据管理器，不写入设置文件。
+        </span>
       </div>
     </div>
 
@@ -922,6 +1078,66 @@ onUnmounted(() => {
 .mirror-chip.selected:hover {
   background: color-mix(in srgb, var(--focus-color) 18%, transparent);
   color: color-mix(in srgb, var(--focus-color) 95%, #fff);
+}
+
+.email-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.email-provider-toggle {
+  width: fit-content;
+}
+
+.email-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.email-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.email-input:focus {
+  border-color: color-mix(in srgb, var(--focus-color) 50%, transparent);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.email-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+}
+
+.email-status.error {
+  color: #f87171;
+}
+
+.email-status.success {
+  color: #4ade80;
+}
+
+.email-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1.5;
 }
 
 .update-action-row {

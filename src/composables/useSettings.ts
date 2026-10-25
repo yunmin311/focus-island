@@ -18,6 +18,8 @@ export type IslandDisplayMode = 'resident' | 'dock' | 'hidden'
 
 export type SystemNotificationMirrorMode = 'all' | 'selected'
 
+export type EmailProvider = 'qq' | '163' | 'gmail'
+
 export interface Settings {
   islandOpacity: number      // 灵动岛透明度 0~0.7，值越大越透明，CSS alpha = 1 - value
   panelOpacity: number       // 面板透明度 0~0.9，同上
@@ -38,6 +40,9 @@ export interface Settings {
   systemNotificationMutedApps: string[] // 全部模式下不镜像的来源（应用名或 AUMID）
   systemNotificationAllowedApps: string[] // 只镜像模式下允许的来源（应用名或 AUMID）
   systemNotificationSilentInFocus: boolean // 番茄专注运行中只记录、不弹岛内 peek
+  emailEnabled: boolean        // 邮件提醒开关
+  emailProvider: EmailProvider // QQ / 163 / Gmail
+  emailAddress: string         // 邮箱地址（授权码存 Windows 凭据管理器）
 }
 
 export const presetThemes: ThemePreset[] = [
@@ -70,6 +75,9 @@ const DEFAULT_SETTINGS: Settings = {
   systemNotificationMutedApps: [],
   systemNotificationAllowedApps: [],
   systemNotificationSilentInFocus: true,
+  emailEnabled: false,
+  emailProvider: 'qq',
+  emailAddress: '',
 }
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS })

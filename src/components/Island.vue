@@ -11,7 +11,7 @@ import DockStrip from "./DockStrip.vue";
 import CapsuleFocus from "./CapsuleFocus.vue";
 import NotificationBanner from "./NotificationBanner.vue";
 import SystemPeekBanner from "./SystemPeekBanner.vue";
-import type { SystemNotificationPayload } from "../composables/useNotifications";
+import type { SystemNotificationPayload, EmailNotificationPayload } from "../composables/useNotifications";
 import type { TimerStatePayload } from "../composables/useTimerBridge";
 
 const { state, setState, setNotificationVisible } = useIslandState();
@@ -27,6 +27,7 @@ let unlistenRadio: (() => void) | null = null;
 let unlistenNotification: (() => void) | null = null;
 let unlistenSystemNotification: (() => void) | null = null;
 let unlistenTaskReminder: (() => void) | null = null;
+let unlistenEmail: (() => void) | null = null;
 let activityTimer: ReturnType<typeof setInterval> | null = null;
 
 const radioPlaying = ref(false);
@@ -226,6 +227,25 @@ function enqueueTaskReminder(payload: TaskReminderPayload) {
     });
 }
 
+function enqueueEmailPeek(payload: EmailNotificationPayload) {
+    if (
+        settings.value.systemNotificationSilentInFocus &&
+        timer.phase.value === "focus" &&
+        timer.running.value
+    ) {
+        return;
+    }
+    const subject = (payload.subject ?? "").trim() || "(无主题)";
+    const from = (payload.from ?? "").trim() || "未知发件人";
+    pushPeekItem({
+        key: `email-${payload.uid}-${payload.date}`,
+        app: "邮件",
+        title: subject,
+        body: from,
+        receivedAt: Date.now(),
+    });
+}
+
 function onSystemPeekOpen() {
     closeSystemPeek(true);
     void emit("open-notifications");
@@ -403,6 +423,14 @@ onMounted(async () => {
             if (payload) enqueueTaskReminder(payload);
         },
     );
+
+    // 邮件通知：同样走 peek 队列
+    unlistenEmail = await listen<EmailNotificationPayload>(
+        "email-notification",
+        ({ payload }) => {
+            if (payload) enqueueEmailPeek(payload);
+        },
+    );
 });
 
 onUnmounted(() => {
@@ -417,6 +445,7 @@ onUnmounted(() => {
     unlistenNotification?.();
     unlistenSystemNotification?.();
     unlistenTaskReminder?.();
+    unlistenEmail?.();
     stopLocalCountdown();
     if (panelMotionTimer) {
         window.clearTimeout(panelMotionTimer);

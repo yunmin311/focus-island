@@ -18,7 +18,12 @@ const { records, unreadCount, markAllRead, clearAll } = useNotifications()
 const notifGroups = computed(() =>
   [
     { key: 'system', title: '系统通知', items: records.value.filter(r => r.kind === 'system') },
-    { key: 'focus', title: '专注提醒', items: records.value.filter(r => r.kind !== 'system') },
+    { key: 'email', title: '邮件', items: records.value.filter(r => r.kind === 'email') },
+    {
+      key: 'focus',
+      title: '专注提醒',
+      items: records.value.filter(r => r.kind !== 'system' && r.kind !== 'email'),
+    },
   ].filter(group => group.items.length > 0),
 )
 
@@ -192,7 +197,7 @@ onActivated(pruneExpiredRecords)
             <div class="notif-dot" />
             <div class="notif-body">
               <div class="notif-line">
-                <span v-if="r.kind === 'system' && r.app" class="notif-app">{{ r.app }}</span>
+                <span v-if="(r.kind === 'system' || r.kind === 'email') && r.app" class="notif-app">{{ r.app }}</span>
                 <span class="notif-title">{{ r.title }}</span>
                 <span class="notif-time">{{ formatNotifTime(r.time) }}</span>
               </div>

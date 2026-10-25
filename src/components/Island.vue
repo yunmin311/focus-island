@@ -4,7 +4,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useIslandState } from "../composables/useIslandState";
 import { useTimer, type NotificationType } from "../composables/useTimer";
-import { useSettings, type Settings } from "../composables/useSettings";
+import { useSettings, shouldMirrorSystemNotification, type Settings } from "../composables/useSettings";
 import { useDockMode } from "../composables/useDockMode";
 import CapsuleIdle from "./CapsuleIdle.vue";
 import DockStrip from "./DockStrip.vue";
@@ -154,6 +154,8 @@ function showNextSystemPeek() {
 function enqueueSystemPeek(payload: SystemNotificationPayload) {
     // 面板已打开时不再弹 peek：横幅会盖住面板顶部
     if (panelOpen.value) return;
+    // 设置页的镜像总开关 / 来源屏蔽
+    if (!shouldMirrorSystemNotification(payload.app, payload.aumid)) return;
     const app = (payload.app ?? "").trim();
     const title = (payload.title ?? "").trim();
     const body = (payload.body ?? "").trim();

@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { listen } from '@tauri-apps/api/event'
 import { readTextFile, writeTextFile, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs'
+import { shouldMirrorSystemNotification } from './useSettings'
 
 export type NotificationKind = 'focus-done' | 'break-done' | 'system'
 
@@ -80,6 +81,7 @@ export function addRecord(kind: 'focus-done' | 'break-done', detail?: string) {
 }
 
 function addSystemRecord(p: SystemNotificationPayload) {
+  if (!shouldMirrorSystemNotification(p.app, p.aumid)) return
   const key = `${p.id}-${p.created_ms}`
   if (systemKeys.has(key)) return
   systemKeys.add(key)

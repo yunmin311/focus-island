@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
+import { useNotifications } from '../composables/useNotifications'
 import { useUpdater } from '../composables/useUpdater'
 import { useForkUpdate } from '../composables/useForkUpdate'
 import AboutDialog from './AboutDialog.vue'
@@ -12,6 +13,33 @@ const emit = defineEmits<{ back: [] }>()
 const SHOW_UPDATER = false
 
 const { settings, resetSettings } = useSettings()
+const { records } = useNotifications()
+
+// 系统通知镜像：来源屏蔽（最近来源 + 已屏蔽来源合并展示，确保可撤销）
+const mirrorSources = computed(() => {
+  const keys: string[] = []
+  const push = (value: string) => {
+    const key = value.trim()
+    if (key && !keys.includes(key)) keys.push(key)
+  }
+  for (const record of records.value) {
+    if (record.kind === 'system') push(record.app || record.aumid || '')
+  }
+  for (const key of settings.value.systemNotificationMutedApps ?? []) push(key)
+  return keys.slice(0, 10)
+})
+
+function isSourceMuted(source: string): boolean {
+  const list = settings.value.systemNotificationMutedApps ?? []
+  return list.some(key => key.toLowerCase() === source.toLowerCase())
+}
+
+function toggleSourceMute(source: string) {
+  const list = settings.value.systemNotificationMutedApps ?? []
+  settings.value.systemNotificationMutedApps = isSourceMuted(source)
+    ? list.filter(key => key.toLowerCase() !== source.toLowerCase())
+    : [...list, source]
+}
 
 function resetAllSettings() {
   if (!window.confirm('恢复所有设置为默认？主题、透明度、显示模式、快捷键和标语都会重置。')) return
@@ -336,6 +364,36 @@ onUnmounted(() => {
         <button type="button" class="update-link-btn" @click="openManualDownload">
           前往 GitHub Release
         </button>
+      </div>
+    </div>
+
+    <!-- 系统通知镜像 -->
+    <div class="settings-section">
+      <div class="section-title">系统通知</div>
+      <div class="update-toggle-row">
+        <div class="update-copy">
+          <span class="update-label">镜像 Windows 通知</span>
+          <span class="update-hint">记录到通知中心，并在岛上短暂提示；系统原生通知不受影响</span>
+        </div>
+        <label class="switch" aria-label="镜像 Windows 通知">
+          <input v-model="settings.systemNotificationMirror" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div v-if="settings.systemNotificationMirror && mirrorSources.length" class="mirror-sources">
+        <span class="mirror-hint">点按来源可屏蔽</span>
+        <div class="mirror-chips">
+          <button
+            v-for="source in mirrorSources"
+            :key="source"
+            type="button"
+            class="mirror-chip"
+            :class="{ muted: isSourceMuted(source) }"
+            @click="toggleSourceMute(source)"
+          >
+            {{ source }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -717,6 +775,55 @@ onUnmounted(() => {
 .switch input:focus-visible + .switch-track {
   outline: 2px solid color-mix(in srgb, var(--focus-color) 80%, white);
   outline-offset: 2px;
+}
+
+.mirror-sources {
+  margin-top: 10px;
+}
+
+.mirror-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.mirror-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mirror-chip {
+  appearance: none;
+  max-width: 170px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.mirror-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.mirror-chip.muted {
+  border-style: dashed;
+  color: rgba(255, 255, 255, 0.35);
+  text-decoration: line-through;
+}
+
+.mirror-chip.muted:hover {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .update-action-row {

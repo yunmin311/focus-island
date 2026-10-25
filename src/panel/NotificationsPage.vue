@@ -107,6 +107,7 @@ onMounted(refreshVolume)
         <div class="notif-dot" />
         <div class="notif-body">
           <div class="notif-line">
+            <span v-if="r.kind === 'system' && r.app" class="notif-app">{{ r.app }}</span>
             <span class="notif-title">{{ r.title }}</span>
             <span class="notif-time">{{ formatNotifTime(r.time) }}</span>
           </div>
@@ -333,9 +334,28 @@ onMounted(refreshVolume)
 }
 
 .notif-title {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   font-weight: 600;
   color: #e8e8ea;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notif-app {
+  flex-shrink: 0;
+  max-width: 40%;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .notif-time {

@@ -1272,6 +1272,7 @@ onUnmounted(() => {
 .collapsible-chevron {
   width: 14px;
   height: 14px;
+  margin-right: 3px;
   color: rgba(255, 255, 255, 0.35);
   flex-shrink: 0;
   transition: transform 0.2s ease;
@@ -1286,10 +1287,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
-}
-
-.email-select {
-  cursor: pointer;
 }
 
 .email-input {
@@ -1315,13 +1312,32 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.email-input.email-select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 30px;
+  background-color: rgba(255, 255, 255, 0.06);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+}
+
+.email-input.email-select:focus {
+  border-color: color-mix(in srgb, var(--focus-color) 50%, transparent);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
 .email-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 4px;
 }
 
 .email-status {
+  margin-top: 2px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   line-height: 1.4;
@@ -1336,6 +1352,9 @@ onUnmounted(() => {
 }
 
 .email-hint {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 10px;
   color: rgba(255, 255, 255, 0.35);
   line-height: 1.5;

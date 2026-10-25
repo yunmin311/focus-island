@@ -709,11 +709,18 @@ onUnmounted(() => {
         </svg>
       </button>
       <div v-if="emailExpanded" class="email-form">
-        <select v-model="settings.emailProvider" class="email-input email-select">
-          <option v-for="provider in emailProviders" :key="provider.id" :value="provider.id">
+        <div class="email-provider-options">
+          <button
+            v-for="provider in emailProviders"
+            :key="provider.id"
+            type="button"
+            class="email-provider-option"
+            :class="{ active: settings.emailProvider === provider.id }"
+            @click="settings.emailProvider = provider.id"
+          >
             {{ provider.label }}
-          </option>
-        </select>
+          </button>
+        </div>
         <input
           v-if="settings.emailProvider === 'custom'"
           v-model="settings.emailImapHost"
@@ -1312,21 +1319,33 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.email-input.email-select {
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-  padding-right: 30px;
-  background-color: rgba(255, 255, 255, 0.06);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px;
+.email-provider-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.email-input.email-select:focus {
-  border-color: color-mix(in srgb, var(--focus-color) 50%, transparent);
-  background-color: rgba(255, 255, 255, 0.08);
+.email-provider-option {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.email-provider-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.email-provider-option.active {
+  background: var(--focus-color);
+  border-color: var(--focus-color);
+  color: #fff;
 }
 
 .email-actions {

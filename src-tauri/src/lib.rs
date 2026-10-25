@@ -1235,6 +1235,171 @@ fn get_macos_update_health<R: Runtime>(_app: AppHandle<R>) -> Option<MacosUpdate
     }
 }
 
+// ==== 系统通知镜像（Windows，MVP） ====
+// 免安装 Win32 应用通过 UserNotificationListener 读取通知中心里的 Toast 历史。
+// 采用轮询而非事件订阅：启动首轮只做 seed（不回放旧通知），之后每 1.5s
+// 读取一次，按 (id, created_ms) 去重，新通知以 "system-notification" 事件发给前端。
+// 注意：系统不允许拦截或关闭原生 Toast，这里只是镜像。
+
+#[cfg(target_os = "windows")]
+#[derive(Clone, serde::Serialize)]
+struct SystemNotificationEvent {
+    id: u32,
+    app: String,
+    aumid: String,
+    title: String,
+    body: String,
+    created_ms: i64,
+}
+
+#[cfg(target_os = "windows")]
+fn read_system_notification_event(
+    n: &windows::UI::Notifications::UserNotification,
+) -> SystemNotificationEvent {
+    use windows::UI::Notifications::KnownNotificationBindings;
+
+    let mut app = String::new();
+    let mut aumid = String::new();
+    if let Ok(info) = n.AppInfo() {
+        if let Ok(display) = info.DisplayInfo() {
+            app = display.DisplayName().map(|s| s.to_string()).unwrap_or_default();
+        }
+        aumid = info.AppUserModelId().map(|s| s.to_string()).unwrap_or_default();
+    }
+
+    let mut title = String::new();
+    let mut body = String::new();
+    if let Ok(notification) = n.Notification() {
+        if let Ok(visual) = notification.Visual() {
+            if let Ok(generic) = KnownNotificationBindings::ToastGeneric() {
+                if let Ok(binding) = visual.GetBinding(&generic) {
+                    if let Ok(texts) = binding.GetTextElements() {
+                        if let Ok(t) = texts.GetAt(0) {
+                            title = t.Text().map(|s| s.to_string()).unwrap_or_default();
+                        }
+                        if texts.Size().unwrap_or(0) > 1 {
+                            if let Ok(t) = texts.GetAt(1) {
+                                body = t.Text().map(|s| s.to_string()).unwrap_or_default();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let created_ms = n
+        .CreationTime()
+        .map(|dt| (dt.UniversalTime / 10_000) - 11_644_473_600_000)
+        .unwrap_or(0);
+
+    SystemNotificationEvent {
+        id: n.Id().unwrap_or(0),
+        app,
+        aumid,
+        title,
+        body,
+        created_ms,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn start_system_notification_mirror<R: Runtime>(app: AppHandle<R>) {
+    let spawned = std::thread::Builder::new()
+        .name("system-notification-mirror".into())
+        .spawn(move || {
+            use std::collections::{HashSet, VecDeque};
+            use std::time::Duration;
+            use windows::UI::Notifications::Management::{
+                UserNotificationListener, UserNotificationListenerAccessStatus,
+            };
+            use windows::UI::Notifications::NotificationKinds;
+
+            // WinRT 监听器需要在 MTA 线程上初始化 COM
+            unsafe {
+                let _ = windows::Win32::System::Com::CoInitializeEx(
+                    None,
+                    windows::Win32::System::Com::COINIT_MULTITHREADED,
+                );
+            }
+
+            let listener = match UserNotificationListener::Current() {
+                Ok(listener) => listener,
+                Err(e) => {
+                    println!("[system-notif] listener unavailable: {e}");
+                    return;
+                }
+            };
+
+            match listener.RequestAccessAsync().and_then(|op| op.get()) {
+                Ok(UserNotificationListenerAccessStatus::Allowed) => {
+                    println!("[system-notif] access allowed, polling");
+                }
+                Ok(status) => {
+                    println!("[system-notif] access not allowed: {status:?}");
+                    return;
+                }
+                Err(e) => {
+                    println!("[system-notif] access request failed: {e}");
+                    return;
+                }
+            }
+
+            let mut seen: HashSet<(u32, i64)> = HashSet::new();
+            let mut seen_order: VecDeque<(u32, i64)> = VecDeque::new();
+            let mut seeded = false;
+            let mut last_error: Option<String> = None;
+
+            loop {
+                match listener
+                    .GetNotificationsAsync(NotificationKinds::Toast)
+                    .and_then(|op| op.get())
+                {
+                    Ok(items) => {
+                        last_error = None;
+                        let count = items.Size().unwrap_or(0);
+                        for i in 0..count {
+                            let Ok(n) = items.GetAt(i) else { continue };
+                            let ev = read_system_notification_event(&n);
+                            let key = (ev.id, ev.created_ms);
+                            if seen.contains(&key) {
+                                continue;
+                            }
+                            seen.insert(key);
+                            seen_order.push_back(key);
+                            while seen_order.len() > 500 {
+                                if let Some(old) = seen_order.pop_front() {
+                                    seen.remove(&old);
+                                }
+                            }
+                            // 首轮只是记录已有通知，不往前端回放
+                            if seeded
+                                && !(ev.title.is_empty()
+                                    && ev.body.is_empty()
+                                    && ev.app.is_empty())
+                            {
+                                let _ = app.emit("system-notification", ev);
+                            }
+                        }
+                        seeded = true;
+                    }
+                    Err(e) => {
+                        let msg = e.to_string();
+                        if last_error.as_deref() != Some(msg.as_str()) {
+                            println!("[system-notif] poll failed: {msg}");
+                            last_error = Some(msg);
+                        }
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(1500));
+            }
+        });
+
+    if let Err(e) = spawned {
+        println!("[system-notif] failed to start mirror thread: {e}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1295,6 +1460,10 @@ pub fn run() {
             // 点击刘海判定依赖真实点击坐标；钩子只需要安装一次
             #[cfg(target_os = "windows")]
             mouse_hook::install();
+
+            // 系统通知镜像：后台轮询通知中心
+            #[cfg(target_os = "windows")]
+            start_system_notification_mirror(app.handle().clone());
 
             #[cfg(desktop)]
             {

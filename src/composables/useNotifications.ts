@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { listen } from '@tauri-apps/api/event'
 import { readTextFile, writeTextFile, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs'
 
-export type NotificationKind = 'focus-done' | 'break-done'
+export type NotificationKind = 'focus-done' | 'break-done' | 'system'
 
 export interface NotificationRecord {
   id: string
@@ -11,6 +11,20 @@ export interface NotificationRecord {
   detail: string
   time: number
   read: boolean
+  /** 系统通知镜像：来源应用名 */
+  app?: string
+  /** 系统通知镜像：来源应用 AUMID */
+  aumid?: string
+}
+
+/** Rust 端 system-notification 事件的载荷 */
+export interface SystemNotificationPayload {
+  id: number
+  app: string
+  aumid: string
+  title: string
+  body: string
+  created_ms: number
 }
 
 const NOTIF_FILE = 'focus-island/notifications.json'
@@ -19,10 +33,11 @@ const LIMIT = 200
 const records = ref<NotificationRecord[]>([])
 const loaded = ref(false)
 let listening = false
+const systemKeys = new Set<string>()
 
 const unreadCount = computed(() => records.value.filter(r => !r.read).length)
 
-const KIND_LABELS: Record<NotificationKind, { title: string; detail: string }> = {
+const KIND_LABELS: Record<'focus-done' | 'break-done', { title: string; detail: string }> = {
   'focus-done': { title: '专注完成', detail: '本轮番茄结束，休息一下' },
   'break-done': { title: '休息结束', detail: '准备好开始下一轮专注了' },
 }
@@ -48,7 +63,7 @@ async function save() {
   }
 }
 
-export function addRecord(kind: NotificationKind, detail?: string) {
+export function addRecord(kind: 'focus-done' | 'break-done', detail?: string) {
   const labels = KIND_LABELS[kind]
   records.value = [
     {
@@ -61,6 +76,30 @@ export function addRecord(kind: NotificationKind, detail?: string) {
     },
     ...records.value,
   ].slice(0, LIMIT)
+  save()
+}
+
+function addSystemRecord(p: SystemNotificationPayload) {
+  const key = `${p.id}-${p.created_ms}`
+  if (systemKeys.has(key)) return
+  systemKeys.add(key)
+
+  const appName = (p.app || '').trim()
+  const title = (p.title || '').trim() || appName || '系统通知'
+  const body = (p.body || '').trim()
+  const detail = body || (appName && appName !== title ? appName : '来自系统通知中心')
+
+  const record: NotificationRecord = {
+    id: `sys-${key}`,
+    kind: 'system',
+    title,
+    detail,
+    time: p.created_ms || Date.now(),
+    read: false,
+    app: appName || undefined,
+    aumid: p.aumid || undefined,
+  }
+  records.value = [record, ...records.value].slice(0, LIMIT)
   save()
 }
 
@@ -91,6 +130,10 @@ export function useNotifications() {
       if (payload === 'focus-done' || payload === 'break-done') {
         addRecord(payload)
       }
+    })
+    // Windows 通知中心的系统通知镜像
+    void listen<SystemNotificationPayload>('system-notification', ({ payload }) => {
+      if (payload) addSystemRecord(payload)
     })
   }
   return { records, unreadCount, markAllRead, clearAll }

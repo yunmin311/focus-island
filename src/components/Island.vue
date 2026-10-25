@@ -26,6 +26,7 @@ let unlistenPanelMotion: (() => void) | null = null;
 let unlistenRadio: (() => void) | null = null;
 let unlistenNotification: (() => void) | null = null;
 let unlistenSystemNotification: (() => void) | null = null;
+let unlistenTaskReminder: (() => void) | null = null;
 let activityTimer: ReturnType<typeof setInterval> | null = null;
 
 const radioPlaying = ref(false);
@@ -38,6 +39,12 @@ interface SystemPeekItem {
     title: string;
     body: string;
     receivedAt: number;
+}
+
+interface TaskReminderPayload {
+    id: string;
+    title: string;
+    time: string;
 }
 const systemPeek = ref<SystemPeekItem | null>(null);
 const systemPeekQueue: SystemPeekItem[] = [];
@@ -151,26 +158,43 @@ function showNextSystemPeek() {
     }
 }
 
-function enqueueSystemPeek(payload: SystemNotificationPayload) {
+function pushPeekItem(item: SystemPeekItem) {
     // 面板已打开时不再弹 peek：横幅会盖住面板顶部
     if (panelOpen.value) return;
+    if (systemPeekQueue.length >= SYSTEM_PEEK_QUEUE_LIMIT) {
+        systemPeekQueue.shift();
+    }
+    systemPeekQueue.push(item);
+    showNextSystemPeek();
+}
+
+function enqueueSystemPeek(payload: SystemNotificationPayload) {
     // 设置页的镜像总开关 / 来源屏蔽
     if (!shouldMirrorSystemNotification(payload.app, payload.aumid)) return;
     const app = (payload.app ?? "").trim();
     const title = (payload.title ?? "").trim();
     const body = (payload.body ?? "").trim();
     if (!app && !title && !body) return;
-    if (systemPeekQueue.length >= SYSTEM_PEEK_QUEUE_LIMIT) {
-        systemPeekQueue.shift();
-    }
-    systemPeekQueue.push({
+    pushPeekItem({
         key: `${payload.id}-${payload.created_ms}`,
         app,
         title,
         body,
         receivedAt: Date.now(),
     });
-    showNextSystemPeek();
+}
+
+function enqueueTaskReminder(payload: TaskReminderPayload) {
+    const title = (payload.title ?? "").trim();
+    if (!title) return;
+    playNotificationSound();
+    pushPeekItem({
+        key: `task-${payload.id}-${Date.now()}`,
+        app: "每日任务",
+        title,
+        body: `${payload.time} 到点了`,
+        receivedAt: Date.now(),
+    });
 }
 
 function onSystemPeekOpen() {
@@ -342,6 +366,14 @@ onMounted(async () => {
             if (payload) enqueueSystemPeek(payload);
         },
     );
+
+    // 每日任务到点提醒：和系统通知共用同一套 peek 队列
+    unlistenTaskReminder = await listen<TaskReminderPayload>(
+        "task-reminder",
+        ({ payload }) => {
+            if (payload) enqueueTaskReminder(payload);
+        },
+    );
 });
 
 onUnmounted(() => {
@@ -355,6 +387,7 @@ onUnmounted(() => {
     unlistenRadio?.();
     unlistenNotification?.();
     unlistenSystemNotification?.();
+    unlistenTaskReminder?.();
     stopLocalCountdown();
     if (panelMotionTimer) {
         window.clearTimeout(panelMotionTimer);

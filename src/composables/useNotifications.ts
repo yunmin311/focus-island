@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import { readTextFile, writeTextFile, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs'
 import { shouldMirrorSystemNotification } from './useSettings'
 
-export type NotificationKind = 'focus-done' | 'break-done' | 'system'
+export type NotificationKind = 'focus-done' | 'break-done' | 'system' | 'task-reminder'
 
 export interface NotificationRecord {
   id: string
@@ -38,9 +38,13 @@ const systemKeys = new Set<string>()
 
 const unreadCount = computed(() => records.value.filter(r => !r.read).length)
 
-const KIND_LABELS: Record<'focus-done' | 'break-done', { title: string; detail: string }> = {
+const KIND_LABELS: Record<
+  'focus-done' | 'break-done' | 'task-reminder',
+  { title: string; detail: string }
+> = {
   'focus-done': { title: '专注完成', detail: '本轮番茄结束，休息一下' },
   'break-done': { title: '休息结束', detail: '准备好开始下一轮专注了' },
+  'task-reminder': { title: '每日任务提醒', detail: '' },
 }
 
 async function load() {
@@ -64,7 +68,7 @@ async function save() {
   }
 }
 
-export function addRecord(kind: 'focus-done' | 'break-done', detail?: string) {
+export function addRecord(kind: 'focus-done' | 'break-done' | 'task-reminder', detail?: string) {
   const labels = KIND_LABELS[kind]
   records.value = [
     {

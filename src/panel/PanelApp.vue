@@ -7,6 +7,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { useSettings } from '../composables/useSettings'
 import { useNotifications } from '../composables/useNotifications'
+import { useTaskReminders } from '../composables/useTaskReminders'
 import { useUpdater } from '../composables/useUpdater'
 import { useTasks } from '../composables/useTasks'
 import { useTaskGroups } from '../composables/useTaskGroups'
@@ -39,6 +40,8 @@ const { startBridge } = useTimerBridge()
 const { settings, settingsReady } = useSettings()
 // 面板启动即开始记录番茄通知，避免通知页未打开时漏记
 useNotifications()
+// 每日任务 repeatTime 到点提醒
+useTaskReminders()
 
 function prewarmPanelData() {
   useTasks()

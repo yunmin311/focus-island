@@ -16,6 +16,8 @@ export type ColorMode = 'dark' | 'light' | 'system'
 
 export type IslandDisplayMode = 'resident' | 'dock' | 'hidden'
 
+export type SystemNotificationMirrorMode = 'all' | 'selected'
+
 export interface Settings {
   islandOpacity: number      // 灵动岛透明度 0~0.7，值越大越透明，CSS alpha = 1 - value
   panelOpacity: number       // 面板透明度 0~0.9，同上
@@ -32,7 +34,9 @@ export interface Settings {
   notificationSound: boolean // 通知提示音开关
   autoLaunch: boolean       // 开机自动启动
   systemNotificationMirror: boolean     // 镜像 Windows 系统通知到通知中心与岛内 peek
-  systemNotificationMutedApps: string[] // 不镜像的来源（应用名或 AUMID）
+  systemNotificationMirrorMode: SystemNotificationMirrorMode // all=全部（可屏蔽）；selected=只镜像允许列表
+  systemNotificationMutedApps: string[] // 全部模式下不镜像的来源（应用名或 AUMID）
+  systemNotificationAllowedApps: string[] // 只镜像模式下允许的来源（应用名或 AUMID）
 }
 
 export const presetThemes: ThemePreset[] = [
@@ -61,7 +65,9 @@ const DEFAULT_SETTINGS: Settings = {
   notificationSound: true,
   autoLaunch: true,
   systemNotificationMirror: true,
+  systemNotificationMirrorMode: 'all',
   systemNotificationMutedApps: [],
+  systemNotificationAllowedApps: [],
 }
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
@@ -82,17 +88,26 @@ export function resolveColorMode(mode: ColorMode): 'dark' | 'light' {
   return 'dark'
 }
 
-/** 系统通知镜像是否应处理这条通知（总开关、自身通知、来源屏蔽） */
+/** 系统通知镜像是否应处理这条通知（总开关、自身通知、来源过滤） */
 export function shouldMirrorSystemNotification(app: string, aumid: string): boolean {
   if (!settings.value.systemNotificationMirror) return false
   const appName = (app ?? '').trim().toLowerCase()
   const appId = (aumid ?? '').trim().toLowerCase()
   if (appId.includes('com.focus-island')) return false
-  const muted = settings.value.systemNotificationMutedApps ?? []
-  return !muted.some((entry) => {
+
+  const matches = (entry: string) => {
     const key = entry.trim().toLowerCase()
     return key.length > 0 && (key === appName || key === appId)
-  })
+  }
+
+  if ((settings.value.systemNotificationMirrorMode ?? 'all') === 'selected') {
+    const allowed = settings.value.systemNotificationAllowedApps ?? []
+    if (allowed.length === 0) return false
+    return allowed.some(matches)
+  }
+
+  const muted = settings.value.systemNotificationMutedApps ?? []
+  return !muted.some(matches)
 }
 
 function onSystemSchemeChange() {

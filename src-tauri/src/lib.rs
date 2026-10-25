@@ -1333,7 +1333,7 @@ fn start_system_notification_mirror<R: Runtime>(app: AppHandle<R>) {
 
             match listener.RequestAccessAsync().and_then(|op| op.get()) {
                 Ok(UserNotificationListenerAccessStatus::Allowed) => {
-                    println!("[system-notif] access allowed, polling");
+                    println!("[system-notif] access allowed");
                 }
                 Ok(status) => {
                     println!("[system-notif] access not allowed: {status:?}");
@@ -1391,7 +1391,9 @@ fn start_system_notification_mirror<R: Runtime>(app: AppHandle<R>) {
                         }
                     }
                 }
-                std::thread::sleep(Duration::from_millis(1500));
+                // 未打包 Win32 应用无法订阅 NotificationChanged，只能轮询；
+                // 1s 间隔在 CPU 开销和镜像延迟之间取平衡。
+                std::thread::sleep(Duration::from_millis(1000));
             }
         });
 

@@ -26,6 +26,7 @@ const mirrorSources = computed(() => {
     if (record.kind === 'system') push(record.app || record.aumid || '')
   }
   for (const key of settings.value.systemNotificationMutedApps ?? []) push(key)
+  for (const key of settings.value.systemNotificationAllowedApps ?? []) push(key)
   return keys.slice(0, 10)
 })
 
@@ -34,11 +35,31 @@ function isSourceMuted(source: string): boolean {
   return list.some(key => key.toLowerCase() === source.toLowerCase())
 }
 
+function isSourceAllowed(source: string): boolean {
+  const list = settings.value.systemNotificationAllowedApps ?? []
+  return list.some(key => key.toLowerCase() === source.toLowerCase())
+}
+
 function toggleSourceMute(source: string) {
   const list = settings.value.systemNotificationMutedApps ?? []
   settings.value.systemNotificationMutedApps = isSourceMuted(source)
     ? list.filter(key => key.toLowerCase() !== source.toLowerCase())
     : [...list, source]
+}
+
+function toggleSourceAllowed(source: string) {
+  const list = settings.value.systemNotificationAllowedApps ?? []
+  settings.value.systemNotificationAllowedApps = isSourceAllowed(source)
+    ? list.filter(key => key.toLowerCase() !== source.toLowerCase())
+    : [...list, source]
+}
+
+function toggleSource(source: string) {
+  if ((settings.value.systemNotificationMirrorMode ?? 'all') === 'selected') {
+    toggleSourceAllowed(source)
+  } else {
+    toggleSourceMute(source)
+  }
 }
 
 function resetAllSettings() {
@@ -380,16 +401,51 @@ onUnmounted(() => {
           <span class="switch-track"></span>
         </label>
       </div>
-      <div v-if="settings.systemNotificationMirror && mirrorSources.length" class="mirror-sources">
-        <span class="mirror-hint">点按来源可屏蔽</span>
+      <div v-if="settings.systemNotificationMirror" class="mirror-mode-row">
+        <span class="mirror-hint">镜像范围</span>
+        <div class="mode-toggle mirror-mode-toggle">
+          <button
+            type="button"
+            class="mode-btn"
+            :class="{ active: (settings.systemNotificationMirrorMode ?? 'all') === 'all' }"
+            @click="settings.systemNotificationMirrorMode = 'all'"
+          >
+            全部
+          </button>
+          <button
+            type="button"
+            class="mode-btn"
+            :class="{ active: settings.systemNotificationMirrorMode === 'selected' }"
+            @click="settings.systemNotificationMirrorMode = 'selected'"
+          >
+            仅选中
+          </button>
+        </div>
+      </div>
+      <div
+        v-if="settings.systemNotificationMirror && (mirrorSources.length > 0 || (settings.systemNotificationMirrorMode ?? 'all') === 'selected')"
+        class="mirror-sources"
+      >
+        <span class="mirror-hint">
+          {{ (settings.systemNotificationMirrorMode ?? 'all') === 'all' ? '点按来源可屏蔽' : '点按来源加入允许列表' }}
+        </span>
+        <span
+          v-if="(settings.systemNotificationMirrorMode ?? 'all') === 'selected' && !(settings.systemNotificationAllowedApps ?? []).length"
+          class="mirror-empty"
+        >
+          允许列表为空，当前不会镜像任何通知
+        </span>
         <div class="mirror-chips">
           <button
             v-for="source in mirrorSources"
             :key="source"
             type="button"
             class="mirror-chip"
-            :class="{ muted: isSourceMuted(source) }"
-            @click="toggleSourceMute(source)"
+            :class="{
+              muted: (settings.systemNotificationMirrorMode ?? 'all') === 'all' && isSourceMuted(source),
+              selected: settings.systemNotificationMirrorMode === 'selected' && isSourceAllowed(source),
+            }"
+            @click="toggleSource(source)"
           >
             {{ source }}
           </button>
@@ -781,6 +837,27 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 
+.mirror-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mirror-mode-toggle .mode-btn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.mirror-empty {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
 .mirror-hint {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.35);
@@ -824,6 +901,17 @@ onUnmounted(() => {
 
 .mirror-chip.muted:hover {
   color: rgba(255, 255, 255, 0.7);
+}
+
+.mirror-chip.selected {
+  border-color: color-mix(in srgb, var(--focus-color) 55%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 12%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 85%, #fff);
+}
+
+.mirror-chip.selected:hover {
+  background: color-mix(in srgb, var(--focus-color) 18%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 95%, #fff);
 }
 
 .update-action-row {

@@ -37,6 +37,7 @@ export interface Settings {
   systemNotificationMirrorMode: SystemNotificationMirrorMode // all=全部（可屏蔽）；selected=只镜像允许列表
   systemNotificationMutedApps: string[] // 全部模式下不镜像的来源（应用名或 AUMID）
   systemNotificationAllowedApps: string[] // 只镜像模式下允许的来源（应用名或 AUMID）
+  systemNotificationSilentInFocus: boolean // 番茄专注运行中只记录、不弹岛内 peek
 }
 
 export const presetThemes: ThemePreset[] = [
@@ -68,6 +69,7 @@ const DEFAULT_SETTINGS: Settings = {
   systemNotificationMirrorMode: 'all',
   systemNotificationMutedApps: [],
   systemNotificationAllowedApps: [],
+  systemNotificationSilentInFocus: true,
 }
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS })

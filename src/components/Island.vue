@@ -192,6 +192,14 @@ function pushPeekItem(item: SystemPeekItem) {
 function enqueueSystemPeek(payload: SystemNotificationPayload) {
     // 设置页的镜像总开关 / 来源屏蔽
     if (!shouldMirrorSystemNotification(payload.app, payload.aumid)) return;
+    // 专注计时运行中只记录到通知中心，不弹岛内提示
+    if (
+        settings.value.systemNotificationSilentInFocus &&
+        timer.phase.value === "focus" &&
+        timer.running.value
+    ) {
+        return;
+    }
     const app = (payload.app ?? "").trim();
     const title = (payload.title ?? "").trim();
     const body = (payload.body ?? "").trim();

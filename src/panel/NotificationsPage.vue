@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import {
   useNotifications,
   formatNotifTime,
@@ -39,6 +40,41 @@ function toggleGroup(key: string) {
 function groupVisibleItems(group: { key: string; items: NotificationRecord[] }): NotificationRecord[] {
   return isGroupExpanded(group.key) ? group.items : group.items.slice(0, GROUP_VISIBLE_LIMIT)
 }
+
+// 单条通知：点击展开完整标题与正文，展开后可复制
+const expandedRecords = ref<Record<string, boolean>>({})
+const copiedId = ref<string | null>(null)
+let copiedTimer: number | null = null
+
+function isRecordExpanded(id: string): boolean {
+  return Boolean(expandedRecords.value[id])
+}
+
+function toggleRecord(id: string) {
+  expandedRecords.value = {
+    ...expandedRecords.value,
+    [id]: !expandedRecords.value[id],
+  }
+}
+
+async function copyRecord(record: NotificationRecord) {
+  try {
+    const text = [record.app, record.title, record.detail].filter(Boolean).join('\n')
+    await writeText(text)
+    copiedId.value = record.id
+    if (copiedTimer !== null) window.clearTimeout(copiedTimer)
+    copiedTimer = window.setTimeout(() => {
+      copiedId.value = null
+      copiedTimer = null
+    }, 1500)
+  } catch {
+    // 剪贴板不可用时静默失败
+  }
+}
+
+onUnmounted(() => {
+  if (copiedTimer !== null) window.clearTimeout(copiedTimer)
+})
 
 // ---- 快捷设置：系统音量 ----
 
@@ -145,7 +181,14 @@ onActivated(pruneExpiredRecords)
           <span class="group-count">{{ group.items.length }}</span>
         </div>
         <div class="notif-list">
-          <div v-for="r in groupVisibleItems(group)" :key="r.id" class="notif-item" :class="{ unread: !r.read }">
+          <div
+            v-for="r in groupVisibleItems(group)"
+            :key="r.id"
+            class="notif-item"
+            :class="{ unread: !r.read, expanded: isRecordExpanded(r.id) }"
+            title="点击展开/收起"
+            @click="toggleRecord(r.id)"
+          >
             <div class="notif-dot" />
             <div class="notif-body">
               <div class="notif-line">
@@ -154,6 +197,11 @@ onActivated(pruneExpiredRecords)
                 <span class="notif-time">{{ formatNotifTime(r.time) }}</span>
               </div>
               <div class="notif-detail">{{ r.detail }}</div>
+              <div v-if="isRecordExpanded(r.id)" class="notif-actions" @click.stop>
+                <button type="button" class="copy-btn" @click="copyRecord(r)">
+                  {{ copiedId === r.id ? '已复制' : '复制' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -408,6 +456,13 @@ onActivated(pruneExpiredRecords)
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.notif-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 .notif-item.unread {
@@ -475,6 +530,44 @@ onActivated(pruneExpiredRecords)
   font-size: 12px;
   color: rgba(255, 255, 255, 0.55);
   margin-top: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notif-item.expanded .notif-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.notif-item.expanded .notif-detail {
+  display: block;
+  overflow: visible;
+}
+
+.notif-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.copy-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.60);
+  font-size: 10.5px;
+  font-family: inherit;
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copy-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .empty {

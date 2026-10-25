@@ -451,6 +451,16 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
+      <div class="update-toggle-row" style="margin-top: 10px;">
+        <div class="update-copy">
+          <span class="update-label">专注时静默</span>
+          <span class="update-hint">番茄计时运行中，系统通知只记录到通知中心，不弹岛内提示</span>
+        </div>
+        <label class="switch" aria-label="专注时静默">
+          <input v-model="settings.systemNotificationSilentInFocus" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
     </div>
 
     <!-- 更新（YM 版） -->

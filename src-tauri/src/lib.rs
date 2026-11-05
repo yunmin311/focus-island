@@ -23,6 +23,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
 #[cfg(target_os = "linux")]
 use x11::xlib;
 
+// GUI 子进程没有可靠的标准输出句柄；app_log! 在写失败时会 panic，
+// 后台线程（尤其是邮箱重试）不能因此把整个应用 abort 掉。
+macro_rules! app_log {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        let _ = writeln!(std::io::stdout(), $($arg)*);
+    }};
+}
+
 const PANEL_GAP_Y: i32 = 28;
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/icon.png");
 
@@ -399,12 +408,12 @@ fn apply_global_shortcut(app: &AppHandle, key: &str) {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     if key.trim().is_empty() {
-        println!("[shortcut] cleared");
+        app_log!("[shortcut] cleared");
         return;
     }
     let parsed = key.trim().parse::<Shortcut>();
     let Ok(sc) = parsed else {
-        println!("[shortcut] invalid key: {key}");
+        app_log!("[shortcut] invalid key: {key}");
         return;
     };
     let result = gs.on_shortcut(sc, |app, _shortcut, event| {
@@ -413,8 +422,8 @@ fn apply_global_shortcut(app: &AppHandle, key: &str) {
         }
     });
     match result {
-        Ok(_) => println!("[shortcut] registered: {key}"),
-        Err(e) => println!("[shortcut] register failed: {key} ({e})"),
+        Ok(_) => app_log!("[shortcut] registered: {key}"),
+        Err(e) => app_log!("[shortcut] register failed: {key} ({e})"),
     }
 }
 
@@ -1327,21 +1336,21 @@ fn start_system_notification_mirror<R: Runtime>(app: AppHandle<R>) {
             let listener = match UserNotificationListener::Current() {
                 Ok(listener) => listener,
                 Err(e) => {
-                    println!("[system-notif] listener unavailable: {e}");
+                    app_log!("[system-notif] listener unavailable: {e}");
                     return;
                 }
             };
 
             match listener.RequestAccessAsync().and_then(|op| op.get()) {
                 Ok(UserNotificationListenerAccessStatus::Allowed) => {
-                    println!("[system-notif] access allowed");
+                    app_log!("[system-notif] access allowed");
                 }
                 Ok(status) => {
-                    println!("[system-notif] access not allowed: {status:?}");
+                    app_log!("[system-notif] access not allowed: {status:?}");
                     return;
                 }
                 Err(e) => {
-                    println!("[system-notif] access request failed: {e}");
+                    app_log!("[system-notif] access request failed: {e}");
                     return;
                 }
             }
@@ -1387,7 +1396,7 @@ fn start_system_notification_mirror<R: Runtime>(app: AppHandle<R>) {
                     Err(e) => {
                         let msg = e.to_string();
                         if last_error.as_deref() != Some(msg.as_str()) {
-                            println!("[system-notif] poll failed: {msg}");
+                            app_log!("[system-notif] poll failed: {msg}");
                             last_error = Some(msg);
                         }
                     }
@@ -1399,7 +1408,7 @@ fn start_system_notification_mirror<R: Runtime>(app: AppHandle<R>) {
         });
 
     if let Err(e) = spawned {
-        println!("[system-notif] failed to start mirror thread: {e}");
+        app_log!("[system-notif] failed to start mirror thread: {e}");
     }
 }
 
@@ -1638,7 +1647,7 @@ fn fetch_new_email<R: Runtime>(
             seen.insert(uid);
         }
         *seeded = true;
-        println!("[email] seeded {} unread", seen.len());
+        app_log!("[email] seeded {} unread", seen.len());
         return Ok(());
     }
 
@@ -1677,6 +1686,52 @@ fn fetch_new_email<R: Runtime>(
 }
 
 #[cfg(target_os = "windows")]
+type ImapClient = imap::Client<native_tls::TlsStream<std::net::TcpStream>>;
+
+#[cfg(target_os = "windows")]
+fn connect_imap(host: &str) -> Result<ImapClient, String> {
+    use std::net::{TcpStream, ToSocketAddrs};
+
+    let addrs = (host, 993u16)
+        .to_socket_addrs()
+        .map_err(|e| format!("解析 {host} 失败: {e}"))?;
+    let tls = native_tls::TlsConnector::new().map_err(|e| format!("TLS 初始化失败: {e}"))?;
+    let mut last_error = format!("无法连接 {host}:993");
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, Duration::from_secs(15)) {
+            Ok(stream) => {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
+                let _ = stream.set_write_timeout(Some(Duration::from_secs(60)));
+                let tls_stream = tls
+                    .connect(host, stream)
+                    .map_err(|e| format!("TLS 握手失败（{host}）: {e}"))?;
+                return Ok(imap::Client::new(tls_stream));
+            }
+            Err(e) => last_error = format!("连接 {host}:993 失败: {e}"),
+        }
+    }
+    Err(last_error)
+}
+
+#[cfg(target_os = "windows")]
+fn friendly_login_error(provider: &str, detail: &str) -> String {
+    let lower = detail.to_lowercase();
+    if lower.contains("login") || lower.contains("password") || lower.contains("auth") {
+        let guide = match provider {
+            "163" | "126" => {
+                "请在网页版邮箱开启 IMAP，并使用客户端授权码（不是登录密码）；授权码失效后请重新生成"
+            }
+            "qq" => "请确认已开启 IMAP，并使用 QQ 邮箱客户端授权码（不是登录密码）",
+            "gmail" => "请确认已开启 IMAP，并使用 Gmail 应用专用密码（不是登录密码）",
+            _ => "请确认已开启 IMAP，并使用客户端授权码或应用专用密码",
+        };
+        format!("登录失败：{guide}。服务器返回：{detail}")
+    } else {
+        format!("登录失败：{detail}")
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn run_email_imap_session<R: Runtime>(
     app: &AppHandle<R>,
     config: &EmailConfig,
@@ -1686,23 +1741,27 @@ fn run_email_imap_session<R: Runtime>(
 ) -> Result<(), String> {
     let host = email_imap_host(&config.provider, &config.custom_host)
         .ok_or_else(|| "不支持的邮箱服务商或未填写服务器".to_string())?;
-    let tls = native_tls::TlsConnector::new().map_err(|e| format!("TLS 初始化失败: {e}"))?;
-    let client = imap::connect((host.as_str(), 993), host.as_str(), &tls)
-        .map_err(|e| format!("连接 {host} 失败: {e}"))?;
-    let mut session = client
-        .login(&config.address, password)
-        .map_err(|e| format!("登录失败: {}", e.0))?;
+    let mut session = connect_imap(&host)
+        .and_then(|client| {
+            client
+                .login(&config.address, password)
+                .map_err(|e| friendly_login_error(&config.provider, &e.0.to_string()))
+        })
+        .map_err(|e| format!("{e}（{host}）"))?;
 
     // 网易邮箱（163/126/QQ）要求客户端先发送 ID 命令
     if config.provider == "163" || config.provider == "126" || config.provider == "qq" {
-        let _ = session
-            .run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.9.0\")");
+        if let Err(e) =
+            session.run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.10.0\")")
+        {
+            app_log!("[email] ID command ignored: {e}");
+        }
     }
 
     session
         .select("INBOX")
         .map_err(|e| format!("选择收件箱失败: {e}"))?;
-    println!("[email] connected: {} ({})", config.address, config.provider);
+    app_log!("[email] connected: {} ({})", config.address, config.provider);
 
     fetch_new_email(app, &mut session, seen, seeded, &config.provider)?;
 
@@ -1748,6 +1807,7 @@ fn start_email_watcher<R: Runtime>(app: AppHandle<R>) {
         .spawn(move || {
             let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
             let mut seeded = false;
+            let mut failures = 0u32;
             loop {
                 let Some(config) = read_email_config(&app) else {
                     std::thread::sleep(Duration::from_secs(10));
@@ -1774,14 +1834,23 @@ fn start_email_watcher<R: Runtime>(app: AppHandle<R>) {
                     &mut seen,
                     &mut seeded,
                 ) {
-                    println!("[email] {e}");
-                    std::thread::sleep(Duration::from_secs(30));
+                    failures = failures.saturating_add(1);
+                    let delay = match failures {
+                        1 => 30,
+                        2 => 60,
+                        3 => 120,
+                        _ => 300,
+                    };
+                    app_log!("[email] attempt {failures} failed: {e}");
+                    std::thread::sleep(Duration::from_secs(delay));
+                } else {
+                    failures = 0;
                 }
             }
         });
 
     if let Err(e) = spawned {
-        println!("[email] failed to start watcher: {e}");
+        app_log!("[email] failed to start watcher: {e}");
     }
 }
 
@@ -1790,34 +1859,46 @@ fn test_email_connection_blocking(
     provider: &str,
     email: &str,
     custom_host: &str,
+    input_password: Option<&str>,
 ) -> Result<String, String> {
     let email = email.trim();
     if email.is_empty() {
         return Err("请先填写邮箱地址".into());
     }
-    let Some((stored_user, password)) = read_email_credential_blocking() else {
-        return Err("请先保存授权码".into());
+    let password = match input_password.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(password) => password.to_string(),
+        None => {
+            let Some((stored_user, password)) = read_email_credential_blocking() else {
+                return Err("请先填写授权码（测试时不会保存）".into());
+            };
+            if !stored_user.eq_ignore_ascii_case(email) {
+                return Err("授权码与当前邮箱不匹配，请重新填写或保存".into());
+            }
+            password
+        }
     };
-    if !stored_user.eq_ignore_ascii_case(email) {
-        return Err("授权码与当前邮箱不匹配，请重新保存".into());
-    }
     let host = email_imap_host(provider, custom_host)
         .ok_or_else(|| "不支持的邮箱服务商或未填写服务器".to_string())?;
-    let tls = native_tls::TlsConnector::new().map_err(|e| format!("TLS 初始化失败: {e}"))?;
-    let client = imap::connect((host.as_str(), 993), host.as_str(), &tls)
-        .map_err(|e| format!("连接 {host} 失败: {e}"))?;
-    let mut session = client
-        .login(email, &password)
-        .map_err(|e| format!("登录失败: {}", e.0))?;
+    let mut session = connect_imap(&host)
+        .and_then(|client| {
+            client
+                .login(email, &password)
+                .map_err(|e| friendly_login_error(provider, &e.0.to_string()))
+        })
+        .map_err(|e| format!("{e}（{host}）"))?;
     if provider == "163" || provider == "126" || provider == "qq" {
-        let _ = session
-            .run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.9.0\")");
+        if let Err(e) =
+            session.run_command_and_check_ok("ID (\"name\" \"FocusIsland\" \"version\" \"2.10.0\")")
+        {
+            app_log!("[email] test ID command ignored: {e}");
+        }
     }
     session
         .select("INBOX")
         .map_err(|e| format!("收件箱不可用: {e}"))?;
+    let unseen = session.uid_search("UNSEEN").map(|ids| ids.len()).unwrap_or(0);
     let _ = session.logout();
-    Ok("连接成功".to_string())
+    Ok(format!("连接成功：收件箱可用，未读 {unseen} 封"))
 }
 
 #[cfg(target_os = "windows")]
@@ -1851,9 +1932,10 @@ async fn test_email_connection(
     provider: String,
     email: String,
     host: String,
+    password: Option<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        test_email_connection_blocking(&provider, &email, &host)
+        test_email_connection_blocking(&provider, &email, &host, password.as_deref())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1938,6 +2020,7 @@ async fn test_email_connection(
     _provider: String,
     _email: String,
     _host: String,
+    _password: Option<String>,
 ) -> Result<String, String> {
     Err("仅支持 Windows".into())
 }
@@ -1966,14 +2049,26 @@ fn delete_email_credential() -> Result<(), String> {
     Err("仅支持 Windows".into())
 }
 
-#[cfg(not(target_os = "windows"))]
-#[tauri::command]
-async fn test_email_connection(_provider: String, _email: String) -> Result<String, String> {
-    Err("仅支持 Windows".into())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 崩溃时留一份可读记录；GUI 模式下 stderr 通常不可见。
+    std::panic::set_hook(Box::new(|info| {
+        use std::io::Write;
+        let path = std::env::var_os("APPDATA").map(std::path::PathBuf::from).map(|p| {
+            p.join("com.focus-island.desktop")
+                .join("focus-island")
+                .join("panic.log")
+        });
+        if let Some(path) = path {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                let _ = writeln!(file, "---- panic ----\n{info}\n");
+            }
+        }
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             focus_panel(app);

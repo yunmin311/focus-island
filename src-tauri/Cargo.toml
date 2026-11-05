@@ -35,7 +35,7 @@ native-tls = "0.2"
 x11 = { version = "2.21", features = ["xlib"] }
 
 [profile.release]
-panic = "abort"
+# 默认 unwind：后台线程 panic 不应直接终止整个应用
 codegen-units = 1
 lto = true
 opt-level = "s"

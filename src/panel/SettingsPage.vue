@@ -209,6 +209,11 @@ async function testEmailConnection() {
     emailStatusOk.value = false
     return
   }
+  if (!emailAuthCode.value.trim() && !emailHasCredential.value) {
+    emailStatus.value = '请填写授权码后再测试'
+    emailStatusOk.value = false
+    return
+  }
   emailTesting.value = true
   emailStatus.value = '正在连接...'
   emailStatusOk.value = null
@@ -217,6 +222,7 @@ async function testEmailConnection() {
       provider: settings.value.emailProvider,
       email,
       host: settings.value.emailProvider === 'custom' ? settings.value.emailImapHost.trim() : '',
+      password: emailAuthCode.value.trim() || null,
     })
     emailStatus.value = message
     emailStatusOk.value = true
@@ -771,7 +777,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="update-btn"
-            :disabled="emailTesting || !emailHasCredential"
+            :disabled="emailTesting"
             @click="testEmailConnection"
           >
             {{ emailTesting ? '测试中...' : '测试连接' }}
@@ -784,7 +790,7 @@ onUnmounted(() => {
           {{ emailStatus || (emailHasCredential ? '授权码已保存在本机' : '尚未保存授权码') }}
         </span>
         <span class="email-hint">
-          QQ / 163 / 126 需开启 IMAP 并使用授权码；Gmail / Outlook 使用应用专用密码（若可用）；其他邮箱选「自定义」并填写 IMAP 服务器。授权码只保存在本机 Windows 凭据管理器。
+          163 / 126 / QQ 需在网页版邮箱开启 IMAP，并使用客户端授权码，不能用登录密码；授权码失效后请重新生成。测试会直接使用当前输入的授权码，不会保存。Gmail / Outlook 使用应用专用密码（若可用）；其他邮箱选「自定义」并填写 IMAP 服务器。授权码只保存在本机 Windows 凭据管理器。
         </span>
       </div>
     </div>

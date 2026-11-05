@@ -29,6 +29,7 @@ let unlistenSystemNotification: (() => void) | null = null;
 let unlistenTaskReminder: (() => void) | null = null;
 let unlistenEmail: (() => void) | null = null;
 let activityTimer: ReturnType<typeof setInterval> | null = null;
+let panelStateTimer: ReturnType<typeof setInterval> | null = null;
 
 const radioPlaying = ref(false);
 const notificationType = ref<NotificationType>(null);
@@ -237,6 +238,7 @@ function enqueueEmailPeek(payload: EmailNotificationPayload) {
     }
     const subject = (payload.subject ?? "").trim() || "(无主题)";
     const from = (payload.from ?? "").trim() || "未知发件人";
+    playNotificationSound();
     pushPeekItem({
         key: `email-${payload.uid}-${payload.date}`,
         app: "邮件",
@@ -344,6 +346,16 @@ onMounted(async () => {
         }
     }, 1000);
 
+    // 面板可见状态以 Rust 为准兜底同步，避免漏掉 close 事件后永久吞掉 peek。
+    panelStateTimer = setInterval(async () => {
+        try {
+            const visible = await invoke<boolean>("is_panel_visible");
+            if (panelOpen.value !== visible) panelOpen.value = visible;
+        } catch {
+            // ignore
+        }
+    }, 1500);
+
     await nextTick();
     reportLayout();
     if (typeof ResizeObserver !== "undefined" && shellRef.value) {
@@ -435,6 +447,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
     if (activityTimer !== null) clearInterval(activityTimer);
+    if (panelStateTimer !== null) clearInterval(panelStateTimer);
     layoutObserver?.disconnect();
     clearSystemPeekTimer();
     systemPeekQueue.length = 0;

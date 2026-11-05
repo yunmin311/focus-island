@@ -1641,6 +1641,88 @@ fn same_email_config<R: Runtime>(app: &AppHandle<R>, config: &EmailConfig) -> bo
 }
 
 #[cfg(target_os = "windows")]
+fn decode_q_header(input: &str) -> Vec<u8> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'_' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'=' if i + 2 < bytes.len() => {
+                let hex = &input[i + 1..i + 3];
+                if let Ok(value) = u8::from_str_radix(hex, 16) {
+                    out.push(value);
+                    i += 3;
+                } else {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+#[cfg(target_os = "windows")]
+fn decode_mime_header(raw: &[u8]) -> String {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let input = String::from_utf8_lossy(raw);
+    let mut out = String::new();
+    let mut cursor = 0;
+    while let Some(relative_start) = input[cursor..].find("=?") {
+        let start = cursor + relative_start;
+        out.push_str(&input[cursor..start]);
+        let Some(relative_end) = input[start..].find("?=") else {
+            out.push_str(&input[start..]);
+            return out;
+        };
+        let end = start + relative_end + 2;
+        let token = &input[start + 2..end - 2];
+        let mut parts = token.splitn(3, '?');
+        let decoded = match (parts.next(), parts.next(), parts.next()) {
+            (Some(charset), Some(encoding), Some(data)) => {
+                let bytes = match encoding.to_ascii_uppercase().as_str() {
+                    "B" => STANDARD.decode(data).ok(),
+                    "Q" => Some(decode_q_header(data)),
+                    _ => None,
+                };
+                bytes.map(|bytes| {
+                    let charset =
+                        encoding_rs::Encoding::for_label(charset.as_bytes()).unwrap_or(encoding_rs::UTF_8);
+                    let (text, _, _) = charset.decode(&bytes);
+                    text.into_owned()
+                })
+            }
+            _ => None,
+        };
+        if let Some(text) = decoded {
+            out.push_str(&text);
+        } else {
+            out.push_str(&input[start..end]);
+        }
+        cursor = end;
+        while input
+            .as_bytes()
+            .get(cursor)
+            .map(|byte| byte.is_ascii_whitespace())
+            .unwrap_or(false)
+        {
+            cursor += 1;
+        }
+    }
+    out.push_str(&input[cursor..]);
+    out
+}
+
+#[cfg(target_os = "windows")]
 fn extract_email_envelope(fetch: &imap::types::Fetch) -> (String, String, String) {
     let Some(envelope) = fetch.envelope() else {
         return ("未知发件人".into(), "(无主题)".into(), String::new());
@@ -1648,7 +1730,7 @@ fn extract_email_envelope(fetch: &imap::types::Fetch) -> (String, String, String
 
     let subject = envelope
         .subject
-        .map(|s| String::from_utf8_lossy(s).trim().to_string())
+        .map(|s| decode_mime_header(s).trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "(无主题)".to_string());
 
@@ -1659,7 +1741,7 @@ fn extract_email_envelope(fetch: &imap::types::Fetch) -> (String, String, String
         .map(|addr| {
             let name = addr
                 .name
-                .map(|n| String::from_utf8_lossy(n).trim().to_string())
+                .map(|n| decode_mime_header(n).trim().to_string())
                 .unwrap_or_default();
             if !name.is_empty() {
                 return name;
@@ -1847,8 +1929,9 @@ fn run_email_imap_session<R: Runtime>(
             }
         }
     } else {
+        // 163/126 等 Coremail 服务不提供 IDLE，只能轮询；10 秒比 60 秒更接近即时提示。
         loop {
-            std::thread::sleep(Duration::from_secs(60));
+            std::thread::sleep(Duration::from_secs(10));
             if !same_email_config(app, config) {
                 let _ = session.logout();
                 return Ok(());

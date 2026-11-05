@@ -82,7 +82,10 @@ async function save() {
 watch([achievements, state], save, { deep: true })
 
 function getDateString(date: Date = new Date()): string {
-  return date.toISOString().split('T')[0]
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function unlockAchievement(id: string) {
@@ -114,7 +117,9 @@ export function useAchievements() {
 
     const today = getDateString()
     if (state.value.lastFocusDate !== today) {
-      const yesterday = getDateString(new Date(Date.now() - 86400000))
+      const yesterdayDate = new Date()
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+      const yesterday = getDateString(yesterdayDate)
       if (state.value.lastFocusDate === yesterday) {
         state.value.streakDays++
       } else {

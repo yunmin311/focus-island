@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount, onDeactivated } from 'vue'
-import { useTasks, type Task } from '../composables/useTasks'
+import { useTasks, type Task, isTaskDoneOnDate, todayString } from '../composables/useTasks'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { useRadio } from '../composables/useRadio'
 import { useTaskGroups } from '../composables/useTaskGroups'
@@ -12,6 +12,7 @@ const emit = defineEmits<{ close: []; navigateToTodo: [tab?: string] }>()
 const { groups } = useTaskGroups()
 
 const {
+  tasks,
   recentFocusTasks: recentTasks,
   addTask,
   setTaskPriority,
@@ -152,9 +153,16 @@ function handleStartTask(task: Task) {
   }
 }
 
+function isDoneToday(task: Task): boolean {
+  return isTaskDoneOnDate(task, todayString.value)
+}
+
 function handleDoneTask(taskId: string) {
+  const task = tasks.value.find(item => item.id === taskId)
+  const doneToday = task ? isDoneToday(task) : false
   if (activeTaskId.value === taskId) {
-    incrementPomodoro(taskId)
+    // 已完成的任务再次点击是撤销完成，不再重复累计番茄。
+    if (!doneToday) incrementPomodoro(taskId)
     abandon()
   }
   toggleComplete(taskId)
@@ -273,7 +281,12 @@ function handleDoneTask(taskId: string) {
         <template v-else>
           <div class="task-row">
             <span class="rank-badge">{{ index === 0 ? '①' : index === 1 ? '②' : '③' }}</span>
-            <button class="check-circle" @click="handleDoneTask(task.id)" title="完成"></button>
+            <button
+              class="check-circle"
+              @click="handleDoneTask(task.id)"
+              title="完成"
+              aria-label="完成"
+            ></button>
             <span class="task-title" @mouseenter="startScroll(task.id, $event.currentTarget)" @mouseleave="stopScroll(task.id)">
               <span class="task-title-text">{{ task.title }}</span>
             </span>
@@ -660,8 +673,11 @@ function handleDoneTask(taskId: string) {
 }
 
 .check-circle {
-  width: 14px;
-  height: 14px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.28);
   background: transparent;
@@ -669,6 +685,14 @@ function handleDoneTask(taskId: string) {
   padding: 0;
   flex-shrink: 0;
   transition: border-color 0.2s, background 0.2s;
+}
+
+/* 视觉尺寸保持紧凑，但把可点击范围扩到约 28px */
+.check-circle::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
 }
 
 .check-circle:hover {

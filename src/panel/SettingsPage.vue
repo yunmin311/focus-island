@@ -254,13 +254,32 @@ const {
   openLatest: openLatestRelease,
 } = useForkUpdate()
 
-// 标语编辑：每行一条，清空则恢复内置默认
-const mottoText = computed({
-    get: () => (settings.value.idleMottos && settings.value.idleMottos.length ? settings.value.idleMottos.join('\n') : ''),
-    set: (v: string) => {
-        settings.value.idleMottos = v.split('\n').map(line => line.trim()).filter(Boolean)
-    },
-})
+// 标语编辑：输入时保留原始换行，失焦时再整理成有效行。
+// 不能直接绑定 split/filter 的 computed，否则单独按 Enter 产生的空行会被立即过滤。
+const mottoDraft = ref('')
+const mottoEditing = ref(false)
+
+function syncMottoDraft() {
+  mottoDraft.value = (settings.value.idleMottos ?? []).join('\n')
+}
+
+function commitMottoDraft(normalize = false) {
+  settings.value.idleMottos = mottoDraft.value
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+  if (normalize) {
+    mottoDraft.value = (settings.value.idleMottos ?? []).join('\n')
+  }
+}
+
+watch(
+  () => settings.value.idleMottos,
+  () => {
+    if (!mottoEditing.value) syncMottoDraft()
+  },
+  { deep: true },
+)
 const {
   checking,
   checked,
@@ -425,6 +444,7 @@ function unbindRecordListeners() {
 
 onMounted(() => {
   bindRecordListeners()
+  syncMottoDraft()
   void refreshEmailCredentialStatus()
   if (settings.value.autoCheckUpdates) {
     void checkForkUpdate(false)
@@ -433,6 +453,7 @@ onMounted(() => {
 
 onActivated(() => {
   bindRecordListeners()
+  syncMottoDraft()
   void refreshEmailCredentialStatus()
 })
 
@@ -849,7 +870,10 @@ onUnmounted(() => {
         class="motto-editor"
         rows="4"
         placeholder="每行一条自定义标语，留空使用默认"
-        v-model="mottoText"
+        v-model="mottoDraft"
+        @input="commitMottoDraft()"
+        @focus="mottoEditing = true"
+        @blur="mottoEditing = false; commitMottoDraft(true)"
       ></textarea>
       <div class="motto-hint">空闲时在灵动岛轮播显示；每行一条，清空恢复默认</div>
     </div>

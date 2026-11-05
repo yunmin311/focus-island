@@ -439,7 +439,8 @@ export function useTasks() {
         }
 
         buckets.active.push(task)
-        if (task.lastActiveAt > 0) {
+        // 每日任务今天完成后从核心专注区移除；次日完成状态自然失效后会重新出现。
+        if (task.lastActiveAt > 0 && !isTaskDoneOnDate(task, todayString.value)) {
           buckets.recentFocus.push(task)
         }
         if (task.groupId) {

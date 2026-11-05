@@ -1,18 +1,18 @@
-# 专注岛 FocusIsland (Custom Fork)
+# FlowIsle（工作名）
 
 <p align="center">
-  <strong>屏幕顶部的灵动岛番茄钟 · Windows 增强定制版</strong><br>
-  <em>Custom fork of <a href="https://github.com/ipfred/focus-island">ipfred/focus-island</a> with Windows-focused enhancements</em>
+  <strong>屏幕顶部的灵动岛番茄钟 · Windows 增强版</strong><br>
+  <em>A Windows-focused focus timer based on <a href="https://github.com/ipfred/focus-island">FocusIsland</a> (Apache-2.0)</em>
 </p>
 
 ---
 
-## 🍴 定制版说明 / About This Fork
+## 关于 FlowIsle / About FlowIsle
 
 > [!NOTE]
-> **中文**：本 Fork 基于 [ipfred/focus-island](https://github.com/ipfred/focus-island) v2.9.0，面向 Windows 增强了以下内容。
+> **中文**：FlowIsle 基于 [ipfred/focus-island](https://github.com/ipfred/focus-island) v2.9.0，并在此基础上持续开发 Windows 增强功能。上游项目以 Apache License 2.0 授权。
 >
-> **English**: This fork is based on [ipfred/focus-island](https://github.com/ipfred/focus-island) v2.9.0 with the following Windows-focused enhancements.
+> **English**: FlowIsle is based on [ipfred/focus-island](https://github.com/ipfred/focus-island) v2.9.0 and continues to add Windows-focused enhancements. The upstream project is licensed under the Apache License 2.0.
 
 | 增强 / Enhancement | 说明 / Description |
 |--------------------|--------------------|

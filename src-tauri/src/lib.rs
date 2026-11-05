@@ -1439,7 +1439,65 @@ struct EmailNotificationEvent {
 }
 
 #[cfg(target_os = "windows")]
-type ImapSession = imap::Session<native_tls::TlsStream<std::net::TcpStream>>;
+struct IdFilterStream {
+    inner: std::io::BufReader<native_tls::TlsStream<std::net::TcpStream>>,
+    pending: std::collections::VecDeque<u8>,
+}
+
+impl IdFilterStream {
+    fn new(stream: native_tls::TlsStream<std::net::TcpStream>) -> Self {
+        Self {
+            inner: std::io::BufReader::new(stream),
+            pending: std::collections::VecDeque::new(),
+        }
+    }
+}
+
+impl std::io::Read for IdFilterStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use std::io::BufRead;
+
+        loop {
+            if !self.pending.is_empty() {
+                let count = buf.len().min(self.pending.len());
+                for slot in buf.iter_mut().take(count) {
+                    *slot = self.pending.pop_front().unwrap();
+                }
+                return Ok(count);
+            }
+
+            let mut line = Vec::new();
+            let read = self.inner.read_until(b'\n', &mut line)?;
+            if read == 0 {
+                return Ok(0);
+            }
+            // 163/126 的 ID 响应是 "* ID (...)"，imap 2.4 的解析器不认识它。
+            // 在流层面丢弃这一行，保留后面的 tagged OK，ID 命令就能正常完成。
+            if line.starts_with(b"* ID ") {
+                continue;
+            }
+            self.pending.extend(line);
+        }
+    }
+}
+
+impl std::io::Write for IdFilterStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.get_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.get_mut().flush()
+    }
+}
+
+impl imap::extensions::idle::SetReadTimeout for IdFilterStream {
+    fn set_read_timeout(&mut self, timeout: Option<Duration>) -> imap::Result<()> {
+        self.inner.get_mut().set_read_timeout(timeout)
+    }
+}
+
+type ImapSession = imap::Session<IdFilterStream>;
 
 #[cfg(target_os = "windows")]
 fn email_imap_host(provider: &str, custom_host: &str) -> Option<String> {
@@ -1686,7 +1744,7 @@ fn fetch_new_email<R: Runtime>(
 }
 
 #[cfg(target_os = "windows")]
-type ImapClient = imap::Client<native_tls::TlsStream<std::net::TcpStream>>;
+type ImapClient = imap::Client<IdFilterStream>;
 
 #[cfg(target_os = "windows")]
 fn connect_imap(host: &str) -> Result<ImapClient, String> {
@@ -1705,7 +1763,7 @@ fn connect_imap(host: &str) -> Result<ImapClient, String> {
                 let tls_stream = tls
                     .connect(host, stream)
                     .map_err(|e| format!("TLS 握手失败（{host}）: {e}"))?;
-                return Ok(imap::Client::new(tls_stream));
+                return Ok(imap::Client::new(IdFilterStream::new(tls_stream)));
             }
             Err(e) => last_error = format!("连接 {host}:993 失败: {e}"),
         }

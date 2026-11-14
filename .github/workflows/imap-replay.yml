@@ -1,0 +1,33 @@
+name: IMAP replay
+
+on:
+  push:
+    paths:
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package*.json'
+      - '.github/workflows/imap-replay.yml'
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package*.json'
+      - '.github/workflows/imap-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npm run vite:build
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib email_imap::tests

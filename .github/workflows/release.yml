@@ -1,0 +1,195 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v2.2.0)'
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version }}
+  # 英文产品名，用于 Release 文件名
+  PRODUCT_NAME_EN: FlowIsle
+  # 中文产品名，需与 tauri.conf.json 中的 productName 一致
+  PRODUCT_NAME_CN: FlowIsle
+
+jobs:
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read changelog
+        id: changelog
+        shell: bash
+        run: |
+          VERSION="${RELEASE_TAG}"
+          NOTES=$(sed -n "/^## ${VERSION}$/,/^## v[0-9]/p" CHANGELOG.md | sed '$d')
+          if [ -z "$NOTES" ]; then
+            NOTES=$(sed -n "/^## ${VERSION}$/,\$p" CHANGELOG.md)
+          fi
+          if [ -z "$NOTES" ]; then
+            NOTES="Release ${VERSION}"
+          fi
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: FlowIsle ${{ env.RELEASE_TAG }}
+          body: ${{ steps.changelog.outputs.notes }}
+          draft: true
+          prerelease: false
+
+  build:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            platform_name: darwin-aarch64
+            target: aarch64-apple-darwin
+            args: --bundles app,dmg --target aarch64-apple-darwin
+          - runner: macos-latest
+            platform_name: darwin-x86_64
+            target: x86_64-apple-darwin
+            args: --bundles app,dmg --target x86_64-apple-darwin
+          - runner: windows-latest
+            platform_name: windows-x86_64
+            target: ''
+            args: --bundles nsis
+          - runner: windows-latest
+            platform_name: windows-aarch64
+            target: aarch64-pc-windows-msvc
+            args: --bundles nsis --target aarch64-pc-windows-msvc
+          - runner: ubuntu-22.04
+            platform_name: linux-x86_64
+            target: ''
+            args: --bundles appimage,deb
+    runs-on: ${{ matrix.runner }}
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Rust stable
+        if: matrix.target == ''
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust stable (with target)
+        if: matrix.target != ''
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libx11-dev fakeroot xdg-utils
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify updater signing secrets
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Missing secret TAURI_SIGNING_PRIVATE_KEY"
+            exit 1
+          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY is set"
+
+      - name: Build signed bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: ${{ matrix.args }}
+          includeUpdaterJson: false
+
+      - name: List bundle artifacts (debug)
+        if: always()
+        shell: bash
+        run: |
+          echo "=== .sig files ==="
+          find src-tauri/target -type f -name '*.sig' 2>/dev/null || true
+          echo "=== bundle directories ==="
+          find src-tauri/target -type d -name 'bundle' 2>/dev/null || true
+          for d in $(find src-tauri/target -type d -name 'bundle' 2>/dev/null); do
+            echo "--- $d ---"
+            ls -lAR "$d" 2>/dev/null || true
+          done
+
+      - name: Upload release assets and collect updater metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PLATFORM_NAME: ${{ matrix.platform_name }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          PRODUCT_NAME_CN: ${{ env.PRODUCT_NAME_CN }}
+          PRODUCT_NAME_EN: ${{ env.PRODUCT_NAME_EN }}
+          METADATA_OUT: release-metadata/${{ matrix.platform_name }}.json
+        run: node scripts/collect-release-assets.mjs
+
+      - name: Upload metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata-${{ matrix.platform_name }}
+          path: release-metadata/${{ matrix.platform_name }}.json
+          if-no-files-found: error
+
+  generate-latest-json:
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download metadata artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-metadata-*
+          merge-multiple: true
+          path: release-metadata
+
+      - name: Generate latest.json
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          METADATA_DIR: release-metadata
+          LATEST_JSON_OUT: latest.json
+        run: node scripts/generate-latest-json.mjs
+
+      - name: Upload latest.json to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${RELEASE_TAG}" latest.json --clobber

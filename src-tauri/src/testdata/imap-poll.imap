@@ -1,0 +1,15 @@
+* OK Coremail IMAP4 ready
+A1 OK LOGIN completed
+* id NIL
+A2 OK ID completed
+* 0 EXISTS
+* OK [UIDVALIDITY 1234] UIDs valid
+A3 OK EXAMINE completed
+* CAPABILITY IMAP4rev1 ID
+A4 OK CAPABILITY completed
+* SEARCH
+A5 OK SEARCH completed
+* SEARCH 1
+A6 OK SEARCH completed
+* 1 FETCH (FLAGS () ENVELOPE (NIL "poll fixture" NIL NIL NIL NIL NIL NIL NIL NIL) UID 1)
+A7 OK FETCH completed

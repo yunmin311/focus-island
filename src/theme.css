@@ -1,0 +1,335 @@
+/* FlowIsle V2 · Liquid Focus 主题 token
+   六套主题完整映射 ink/secondary/surface/shell/glow/line/accent/on-accent。
+   组件只消费语义变量，不再按页复制一套颜色。 */
+
+:root {
+  --v2-ink: #302a25;
+  --v2-secondary: #6d6258;
+  --v2-muted: #6b6055;
+  --v2-surface: #fbf8f2;
+  --v2-shell: #f7f2e9;
+  --v2-glow: #d8a9872e;
+  --v2-line: #6d62583d;
+  --v2-accent: #a85a36;
+  --v2-on-accent: #fbf7f0;
+  --v2-popover: #fcfaf6;
+  --v2-shadow: #3a2c221c;
+  --v2-break: #5f7a5c;
+  --v2-idle: #6d6258;
+  --v2-alert: #b07a45;
+  --v2-danger: #b84237;
+  color-scheme: light;
+}
+
+:root[data-theme-id="classic"] {
+  --v2-ink: #37271f;
+  --v2-secondary: #795a4e;
+  --v2-muted: #6f5045;
+  --v2-surface: #fff7f0;
+  --v2-shell: #fff0e0;
+  --v2-glow: #f3935d50;
+  --v2-line: #9a513b42;
+  --v2-accent: #b34127;
+  --v2-on-accent: #fffaf5;
+  --v2-popover: #fff8f2;
+  --v2-shadow: #6a2f161c;
+  --v2-break: #537b51;
+  --v2-idle: #4a8fd4;
+  --v2-alert: #e8a23a;
+}
+
+:root[data-theme-id="ocean"] {
+  --v2-ink: #26353a;
+  --v2-secondary: #5f6f74;
+  --v2-muted: #5b6d72;
+  --v2-surface: #f5f8f8;
+  --v2-shell: #eef4f3;
+  --v2-glow: #7bced226;
+  --v2-line: #4a6b743d;
+  --v2-accent: #2f6f7f;
+  --v2-on-accent: #f7ffff;
+  --v2-popover: #f9fbfb;
+  --v2-shadow: #163d481c;
+  --v2-break: #3f6f5e;
+  --v2-idle: #6f8189;
+  --v2-alert: #a8753e;
+}
+
+:root[data-theme-id="lavender"] {
+  --v2-ink: #403249;
+  --v2-secondary: #756481;
+  --v2-muted: #6d5c7b;
+  --v2-surface: #fbf6ff;
+  --v2-shell: #f0e7fa;
+  --v2-glow: #bf9de550;
+  --v2-line: #8662a042;
+  --v2-accent: #79509e;
+  --v2-on-accent: #fffbff;
+  --v2-popover: #fcf8ff;
+  --v2-shadow: #4b2d601c;
+  --v2-break: #6f7f5a;
+  --v2-idle: #7c8ba1;
+  --v2-alert: #c98a20;
+}
+
+:root[data-theme-id="forest"] {
+  --v2-ink: #273e2b;
+  --v2-secondary: #5d745e;
+  --v2-muted: #566a52;
+  --v2-surface: #f5fbef;
+  --v2-shell: #eaf2de;
+  --v2-glow: #9bc48050;
+  --v2-line: #5e805042;
+  --v2-accent: #3f7043;
+  --v2-on-accent: #fafff3;
+  --v2-popover: #f8fdf2;
+  --v2-shadow: #29452b1c;
+  --v2-break: #3f7043;
+  --v2-idle: #8e9aaf;
+  --v2-alert: #b46e20;
+}
+
+:root[data-theme-id="cyber"] {
+  --v2-ink: #482c47;
+  --v2-secondary: #7e5d7a;
+  --v2-muted: #745270;
+  --v2-surface: #fff4fd;
+  --v2-shell: #f9e6f3;
+  --v2-glow: #ee9fc950;
+  --v2-line: #a25e9542;
+  --v2-accent: #a8357c;
+  --v2-on-accent: #fffaff;
+  --v2-popover: #fff7fd;
+  --v2-shadow: #5c1f4b1c;
+  --v2-break: #2f7a6a;
+  --v2-idle: #a29bfe;
+  --v2-alert: #b8791e;
+}
+
+:root[data-theme-id="liquid"] {
+  --v2-ink: #302a25;
+  --v2-secondary: #6d6258;
+  --v2-muted: #6b6055;
+  --v2-surface: #fbf8f2;
+  --v2-shell: #f7f2e9;
+  --v2-glow: #d8a9872e;
+  --v2-line: #6d62583d;
+  --v2-accent: #a85a36;
+  --v2-on-accent: #fbf7f0;
+  --v2-popover: #fcfaf6;
+  --v2-shadow: #3a2c221c;
+  --v2-break: #5f7a5c;
+  --v2-idle: #6d6258;
+  --v2-alert: #b07a45;
+}
+
+:root[data-color-mode="dark"] {
+  --v2-ink: #f0ece5;
+  --v2-secondary: #c7bdb3;
+  --v2-muted: #a79d93;
+  --v2-surface: #2b2724;
+  --v2-shell: #24201d;
+  --v2-glow: #d08a5c30;
+  --v2-line: #f0d8b938;
+  --v2-accent: #d69a72;
+  --v2-on-accent: #2f2118;
+  --v2-popover: #2d2a27;
+  --v2-shadow: #00000055;
+  --v2-break: #a9c09a;
+  --v2-idle: #c7bdb3;
+  --v2-alert: #e0b184;
+  --v2-danger: #ff9b93;
+  color-scheme: dark;
+}
+
+:root[data-theme-id="classic"][data-color-mode="dark"] {
+  --v2-ink: #ffeadd;
+  --v2-secondary: #cab0a0;
+  --v2-muted: #b79b8b;
+  --v2-surface: #39271f;
+  --v2-shell: #35251b;
+  --v2-glow: #e16b3338;
+  --v2-line: #eeb48c38;
+  --v2-accent: #ffac83;
+  --v2-on-accent: #3b2014;
+  --v2-popover: #3a281f;
+  --v2-shadow: #00000055;
+  --v2-break: #a8cfa5;
+  --v2-idle: #9fc8ec;
+  --v2-alert: #ffcf8a;
+}
+
+:root[data-theme-id="ocean"][data-color-mode="dark"] {
+  --v2-ink: #e5eded;
+  --v2-secondary: #aebfc3;
+  --v2-muted: #8e9ea1;
+  --v2-surface: #232a2c;
+  --v2-shell: #1c2224;
+  --v2-glow: #6fa7b330;
+  --v2-line: #a8c7cd38;
+  --v2-accent: #9cc6cf;
+  --v2-on-accent: #1d2e33;
+  --v2-popover: #252d2f;
+  --v2-shadow: #00000055;
+  --v2-break: #8fc0b0;
+  --v2-idle: #aebfc3;
+  --v2-alert: #d8b07a;
+}
+
+:root[data-theme-id="lavender"][data-color-mode="dark"] {
+  --v2-ink: #f3e9ff;
+  --v2-secondary: #c3afda;
+  --v2-muted: #b09ec7;
+  --v2-surface: #352a44;
+  --v2-shell: #2c233b;
+  --v2-glow: #aa79d638;
+  --v2-line: #c3a1de38;
+  --v2-accent: #d4b0ff;
+  --v2-on-accent: #362249;
+  --v2-popover: #352a44;
+  --v2-shadow: #00000055;
+  --v2-break: #b9d0a0;
+  --v2-idle: #c3afda;
+  --v2-alert: #ffd37a;
+}
+
+:root[data-theme-id="forest"][data-color-mode="dark"] {
+  --v2-ink: #eaf4db;
+  --v2-secondary: #b5c9a4;
+  --v2-muted: #a4b894;
+  --v2-surface: #283c2b;
+  --v2-shell: #223327;
+  --v2-glow: #80a85e38;
+  --v2-line: #adc98c38;
+  --v2-accent: #b0d78d;
+  --v2-on-accent: #23381d;
+  --v2-popover: #293d2c;
+  --v2-shadow: #00000055;
+  --v2-break: #b0d78d;
+  --v2-idle: #b5c9a4;
+  --v2-alert: #ffc08a;
+}
+
+:root[data-theme-id="cyber"][data-color-mode="dark"] {
+  --v2-ink: #ffe5f5;
+  --v2-secondary: #d9accd;
+  --v2-muted: #c79cbb;
+  --v2-surface: #352238;
+  --v2-shell: #2a1b31;
+  --v2-glow: #e96aaa38;
+  --v2-line: #d799ce38;
+  --v2-accent: #ff9bd0;
+  --v2-on-accent: #42172e;
+  --v2-popover: #36233a;
+  --v2-shadow: #00000055;
+  --v2-break: #8fe6c8;
+  --v2-idle: #d9accd;
+  --v2-alert: #ffe0a0;
+}
+
+:root[data-theme-id="liquid"][data-color-mode="dark"] {
+  --v2-ink: #f0ece5;
+  --v2-secondary: #c7bdb3;
+  --v2-muted: #a79d93;
+  --v2-surface: #2b2724;
+  --v2-shell: #24201d;
+  --v2-glow: #d08a5c30;
+  --v2-line: #f0d8b938;
+  --v2-accent: #d69a72;
+  --v2-on-accent: #2f2118;
+  --v2-popover: #2d2a27;
+  --v2-shadow: #00000055;
+  --v2-break: #a9c09a;
+  --v2-idle: #c7bdb3;
+  --v2-alert: #e0b184;
+}
+
+/* 语义别名：旧组件与预览层共用同一组值 */
+:root,
+:root[data-theme-id] {
+  --ui-ink: var(--v2-ink);
+  --ui-secondary: var(--v2-secondary);
+  --ui-muted: var(--v2-muted);
+  --ui-disabled: var(--v2-muted);
+  --ui-line: var(--v2-line);
+  --ui-line-medium: color-mix(in srgb, var(--v2-ink) 20%, transparent);
+  --ui-line-strong: color-mix(in srgb, var(--v2-ink) 35%, transparent);
+  --ui-surface: var(--v2-surface);
+  --ui-hover: color-mix(in srgb, var(--v2-accent) 8%, transparent);
+  --ui-pressed: color-mix(in srgb, var(--v2-accent) 15%, transparent);
+  /* 凹槽/输入底用一点强调色，避免中性灰把面板拉灰 */
+  --ui-well: color-mix(in srgb, var(--v2-accent) 6%, transparent);
+  --ui-accent-ink: var(--v2-accent);
+  --ui-accent-solid: var(--v2-accent);
+  --ui-popover: var(--v2-popover);
+  --ui-shadow-soft: var(--v2-shadow);
+  --ui-shadow-deep: var(--v2-shadow);
+  --ui-success: #4f805d;
+  --ui-danger: #b84237;
+
+  --lf-ink: var(--v2-ink);
+  --lf-secondary: var(--v2-secondary);
+  --lf-muted: var(--v2-muted);
+  --lf-surface: var(--v2-surface);
+  --lf-well: var(--ui-well);
+  --lf-line: var(--v2-line);
+  --lf-popover: var(--v2-popover);
+  --lf-shadow: var(--v2-shadow);
+  --lf-accent: var(--v2-accent);
+  --lf-accent-solid: var(--v2-accent);
+  --lf-on: var(--v2-on-accent);
+  --lf-glow: var(--v2-glow);
+
+  --focus-color: var(--v2-accent);
+  --break-color: var(--v2-break);
+  --idle-color: var(--v2-idle);
+  --alert-color: var(--v2-alert);
+
+  --panel-text: var(--v2-ink);
+  --panel-shell-bg: var(--v2-shell);
+  /* 亮面玻璃：边框用白色亮边，而不是灰墨线；暗色主题在下方单独压低 */
+  --panel-shell-border: color-mix(in srgb, #ffffff 60%, transparent);
+  --panel-shell-edge:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 var(--v2-shadow);
+  --panel-sheen-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 24%),
+    radial-gradient(circle at 50% 0, color-mix(in srgb, var(--v2-glow) 55%, transparent), transparent 52%);
+  --panel-vignette-bg: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.10));
+
+  --capsule-text: var(--v2-ink);
+  --capsule-text-dim: var(--v2-secondary);
+  --capsule-muted: var(--v2-muted);
+  --capsule-dot: var(--v2-accent);
+  --capsule-dot-idle: var(--v2-line);
+
+  /* 通知弹窗/系统通知条与灵动岛共用同一层玻璃底色，透明度才统一 */
+  --notif-bg: var(--island-shell-bg, var(--v2-surface));
+  --notif-border: var(--v2-line);
+  --notif-shadow: 0 10px 28px var(--v2-shadow);
+  --notif-icon-bg: var(--ui-well);
+  --notif-title-color: var(--v2-ink);
+  --notif-sub-color: var(--v2-secondary);
+  --notif-dismiss-border: var(--v2-line);
+  --notif-dismiss-color: var(--v2-muted);
+  --notif-dismiss-hover-bg: var(--ui-hover);
+  --notif-dismiss-hover-border: var(--ui-line-medium);
+  --notif-dismiss-hover-color: var(--v2-ink);
+
+  --space-page: 12px;
+  --space-card: 16px;
+  --space-heading: 12px;
+  --space-control: 8px;
+}
+
+/* 内容卡片用暖白半透明表面：形状/边缘清楚，但仍是同一层玻璃里的内容，不额外套壳 */
+:root,
+:root[data-theme-id] {
+  --v2-surface: rgba(255, 251, 243, 0.58);
+}
+
+:root[data-color-mode="dark"],
+:root[data-color-mode="dark"][data-theme-id] {
+  --v2-surface: rgba(255, 255, 255, 0.06);
+  --panel-shell-border: color-mix(in srgb, #ffffff 16%, transparent);
+}

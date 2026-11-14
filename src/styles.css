@@ -1,0 +1,2098 @@
+@import 'tailwindcss';
+@import './theme.css';
+
+@layer base {
+  html {
+    background-color: transparent !important;
+  }
+}
+
+:root {
+  --panel-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --island-radius: 22px;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  background-color: transparent !important;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* panel 窗口：允许文字选中和滚动 */
+.panel-root {
+  user-select: text;
+  -webkit-user-select: text;
+  overflow: hidden;
+}
+
+.panel-root input,
+.panel-root textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--v2-accent);
+  outline-offset: 2px;
+}
+
+/* 页内浮层通用卡片：内容层不再叠 backdrop-filter，材质只留在外壳 */
+.glass-panel {
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  box-shadow: none;
+}
+
+/* slide-right transition for TaskDetail */
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s;
+}
+.slide-right-enter-from,
+.slide-right-leave-to {
+  transform: translateX(32px);
+  opacity: 0;
+}
+
+/* ===== V2 外壳与全局材质 ===== */
+#app .panel-root {
+  color: var(--v2-ink);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+#app .panel-root .panel-inner {
+  filter: none;
+}
+
+/* 面板内部不再叠第二层 blur：材质只留在外壳 */
+#app .panel-root * {
+  backdrop-filter: none !important;
+}
+
+#app .panel-root .panel-body {
+  min-height: 0;
+  overflow: clip;
+}
+
+/* 防止长文本 / 长控件把页面撑出右边缘 */
+#app .panel-root .panel-body :where(div, section, header, footer, article, nav, form) {
+  min-width: 0;
+}
+
+#app .panel-root :is(.titlebar, .queue-row, .hero-meta, .hero-actions, .task-row, .memo-item-header,
+  .editor-top-bar, .editor-title-area, .notif-line, .record-tools, .station-item, .item-header,
+  .settings-page, .settings-section, .setting-row, .update-toggle-row, .email-actions,
+  .todo-header, .quick-add-input-row, .radio-row, .focus-hero) {
+  min-width: 0;
+}
+
+#app .panel-root :is(.queue-copy, .task-content, .memo-item-title, .radio-info, .item-content,
+  .notif-body, .title-display, .update-copy) {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+#app .panel-root :is(.memo-item-preview, .task-title, .title-text, .editor-content, .settings-page,
+  .update-hint, .email-hint, .shortcut-hint, .notif-title, .notif-detail, .station-name, .item-name,
+  .app-origin, .app-version) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 面板内图片不叠旧光效；磨砂底图需要自己的 blur，单独放行 */
+#app .panel-root :is(img, video, canvas):not(.panel-backdrop) {
+  filter: none !important;
+}
+
+/* ===== 标题栏 / 搜索 ===== */
+#app .panel-root .titlebar {
+  flex: 0 0 40px;
+  height: 40px;
+  padding: 0 12px;
+  gap: 8px;
+  border-bottom: 1px solid var(--v2-line);
+  background: transparent;
+}
+
+#app .panel-root .titlebar-title {
+  color: var(--v2-ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+#app .panel-root .titlebar-icon {
+  color: var(--v2-accent);
+}
+
+#app .panel-root .titlebar-search {
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 260px;
+  height: 32px;
+  padding: 0 10px;
+  gap: 8px;
+  background: var(--ui-well);
+  border: 1px solid var(--v2-line);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+#app .panel-root .titlebar-search:focus-within {
+  background: color-mix(in srgb, var(--v2-accent) 7%, var(--ui-well));
+  border-color: color-mix(in srgb, var(--v2-accent) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--v2-accent) 13%, transparent);
+}
+
+#app .panel-root .search-icon {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .titlebar-search:focus-within .search-icon {
+  color: var(--v2-accent);
+}
+
+#app .panel-root .search-input {
+  min-width: 0;
+  padding: 0;
+  color: var(--v2-ink);
+  font-size: 12px;
+}
+
+#app .panel-root .search-input::placeholder {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .search-clear {
+  width: 18px;
+  height: 18px;
+  background: var(--ui-well);
+  color: var(--v2-muted);
+}
+
+#app .panel-root .search-clear:hover {
+  background: var(--ui-pressed);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .btn-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--ui-well);
+  color: var(--v2-muted);
+  font-size: 12px;
+}
+
+#app .panel-root .btn-close:hover {
+  background: var(--ui-pressed);
+  color: var(--v2-ink);
+}
+
+/* 强调色按钮：文字跟随主题的 on-accent，避免浅色模式下变成深字深底 */
+#app .panel-root :is(
+  .primary-action,
+  .footer-btn.primary,
+  .update-btn.primary,
+  .update-banner-btn.primary,
+  .email-provider-option.active,
+  .settings-page .mode-btn.active,
+  .stats-page .tab.active,
+  .toolbar-btn.active,
+  .day-cell.selected,
+  .check-circle.checked,
+  .task-checkbox.checked,
+  .subtask-checkbox.checked,
+  .memo-checkbox:checked
+) {
+  color: var(--v2-on-accent);
+}
+
+/* ===== 底栏：固定 43px，不覆盖正文 ===== */
+#app .panel-root .panel-nav {
+  flex: 0 0 43px;
+  height: 43px;
+  margin: 0;
+  padding: 8px 16px;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--v2-line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+#app .panel-root .nav-btn {
+  min-width: 0;
+  flex-direction: row;
+  gap: 4px;
+  min-height: 26px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  color: var(--v2-muted);
+  font-size: 11px;
+}
+
+#app .panel-root .nav-btn:hover {
+  color: var(--v2-ink);
+  background: var(--ui-hover);
+}
+
+#app .panel-root .nav-btn.active {
+  color: var(--v2-accent);
+  background: var(--ui-well);
+}
+
+#app .panel-root .nav-icon {
+  width: 14px;
+  height: 14px;
+}
+
+#app .panel-root .nav-label {
+  font-size: 11px;
+  line-height: 1;
+}
+
+@media (max-width: 389px) {
+  #app .panel-root .panel-nav {
+    margin: 0;
+    padding: 4px 12px;
+    gap: 4px;
+  }
+
+  #app .panel-root .nav-btn {
+    height: 34px;
+    min-height: 34px;
+    flex-direction: column;
+    gap: 3px;
+    padding: 2px 1px;
+  }
+
+  #app .panel-root .nav-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  #app .panel-root .nav-label {
+    font-size: 11px;
+    line-height: 13px;
+  }
+}
+
+/* ===== 七页通用间距与文字语义 ===== */
+#app .panel-root :is(.home-page, .todo-page, .memo-page, .stats-page, .radio-page, .settings-page, .notif-page) {
+  padding: 12px;
+  color: var(--v2-ink);
+}
+
+#app .panel-root :is(.home-page, .todo-page, .stats-page, .radio-page, .notif-page) {
+  gap: 16px;
+}
+
+#app .panel-root :is(.settings-page, .settings-page input, .settings-page button, .settings-page label, .settings-page textarea) {
+  font-size: 12px;
+}
+
+#app .panel-root :is(.home-page, .settings-page, .stats-page, .radio-page) {
+  min-height: 0;
+  padding-bottom: 16px;
+  scroll-padding-bottom: 16px;
+  overscroll-behavior: contain;
+}
+
+#app .panel-root :is(.todo-page .task-list, .memo-list) {
+  padding-bottom: 16px;
+  scroll-padding-bottom: 16px;
+  overscroll-behavior: contain;
+}
+
+#app .panel-root :is(.titlebar-title, .page-title, .section-title, .update-label, .zone-header, .task-title, .task-title-text,
+  .running-title, .running-title .task-title-text, .card-count, .radio-name, .memo-title, .memo-item-title,
+  .station-name, .item-name, .records-intro h2, .stat-number, .stat-value, .group-title, .notif-title, .editor-content,
+  .title-input, .settings-header, .appearance-heading, .title-text, .subtask-title, .subtask-timer-name,
+  .app-name, .dialog-title, .badge-name) {
+  color: var(--v2-ink);
+}
+
+#app .panel-root :is(.update-hint, .shortcut-hint, .email-hint, .task-time, .pomo-count, .task-group-badge,
+  .card-label, .radio-status, .notif-detail, .notif-app, .notif-time, .group-count, .empty, .focus-empty-text,
+  .stat-label, .station-desc, .item-desc, .memo-item-preview, .memo-preview, .theme-name, .text-btn,
+  .save-time, .app-version, .app-origin, .changes-title, .changes-list, .link-btn) {
+  color: var(--v2-muted);
+}
+
+#app .panel-root :is(input, textarea, select) {
+  min-width: 0;
+  color: var(--v2-ink);
+}
+
+#app .panel-root :is(input, textarea)::placeholder {
+  color: var(--v2-muted);
+}
+
+#app .panel-root :is(.quick-add-input, .email-input, .edit-input, .subtask-add-input, .memo-search-input, .title-edit-input) {
+  min-height: 34px;
+  padding: 8px 10px;
+  background: var(--ui-well);
+  border: 1px solid var(--v2-line);
+  border-radius: 8px;
+  color: var(--v2-ink);
+}
+
+#app .panel-root :is(.quick-add-input:focus, .email-input:focus, .edit-input:focus, .subtask-add-input:focus) {
+  border-color: color-mix(in srgb, var(--v2-accent) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--v2-accent) 12%, transparent);
+}
+
+#app .panel-root .chip-dropdown,
+#app .panel-root .tabs-dropdown-menu,
+#app .panel-root .color-dropdown,
+#app .panel-root [data-viewport-popover] {
+  background: var(--v2-popover);
+  border: 1px solid var(--v2-line);
+  color: var(--v2-ink);
+  box-shadow: 0 8px 24px var(--v2-shadow);
+  backdrop-filter: none;
+}
+
+#app .panel-root *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+#app .panel-root *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#app .panel-root *::-webkit-scrollbar-thumb {
+  background: var(--ui-line-strong);
+  border-radius: 2px;
+}
+
+/* ===== 首页 ===== */
+#app .panel-root .home-page {
+  gap: 16px;
+}
+
+#app .panel-root .quick-add-zone {
+  order: 3;
+  margin: 0;
+}
+
+#app .panel-root .focus-zone {
+  order: 2;
+}
+
+#app .panel-root .radio-zone {
+  order: 4;
+  margin: 0;
+  padding: 0;
+}
+
+#app .panel-root .cards-zone {
+  order: 5;
+  margin: 0;
+  padding: 0;
+}
+
+#app .panel-root .quick-add-row {
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 6px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--v2-line);
+  border-radius: 0;
+}
+
+#app .panel-root .quick-add-row .quick-add-input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+#app .panel-root .quick-add-btn {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ui-well);
+  color: var(--v2-accent);
+  font-size: 12px;
+}
+
+#app .panel-root .quick-add-btn:hover:not(:disabled) {
+  background: var(--ui-hover);
+}
+
+#app .panel-root .zone-header {
+  margin-bottom: 12px;
+  color: var(--v2-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+#app .panel-root .focus-container {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+#app .panel-root .focus-task-item {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--v2-line);
+  border-radius: 0;
+}
+
+#app .panel-root .focus-task-item:hover {
+  background: var(--ui-hover);
+}
+
+#app .panel-root .focus-task-item.is-running {
+  border: 0;
+  border-bottom: 1px solid var(--v2-line);
+  border-left: 3px solid var(--active-color);
+  background: color-mix(in srgb, var(--active-color) 7%, transparent);
+  padding: 8px 12px;
+}
+
+#app .panel-root .focus-task-item .task-row {
+  min-height: 44px;
+  padding: 0 2px;
+}
+
+#app .panel-root .rank-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--v2-accent);
+  background: var(--ui-well);
+  font-size: 11px;
+}
+
+#app .panel-root .check-circle {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--v2-muted);
+}
+
+#app .panel-root .check-circle:hover {
+  border-color: var(--v2-break);
+  background: color-mix(in srgb, var(--v2-break) 15%, transparent);
+}
+
+#app .panel-root .task-title {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+#app .panel-root .task-time {
+  font-size: 12px;
+}
+
+#app .panel-root .pomo-count {
+  color: var(--v2-accent);
+}
+
+#app .panel-root .task-group-badge {
+  background: var(--ui-well);
+  color: var(--v2-muted);
+  border-radius: 4px;
+}
+
+#app .panel-root .start-btn,
+#app .panel-root .act-btn {
+  min-width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border-color: var(--v2-line);
+  background: var(--ui-well);
+  color: var(--v2-accent);
+}
+
+#app .panel-root .start-btn:hover,
+#app .panel-root .act-btn:hover {
+  background: var(--ui-hover);
+  border-color: var(--v2-line);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .radio-row {
+  padding: 10px 12px;
+  background: var(--ui-well);
+  border: 0;
+  border-radius: 10px;
+}
+
+#app .panel-root .radio-play-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .radio-play-btn:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+  transform: none;
+}
+
+#app .panel-root .radio-play-btn.playing {
+  background: color-mix(in srgb, var(--v2-accent) 12%, var(--v2-surface));
+  border-color: color-mix(in srgb, var(--v2-accent) 38%, transparent);
+  color: var(--v2-accent);
+  box-shadow: none;
+}
+
+#app .panel-root .radio-name {
+  font-size: 14px;
+}
+
+#app .panel-root .radio-status {
+  font-size: 12px;
+}
+
+#app .panel-root .radio-wave {
+  height: 12px;
+  gap: 4px;
+}
+
+#app .panel-root .radio-wave .wave-bar {
+  width: 4px;
+  height: 12px;
+  border-radius: 0;
+  background: var(--v2-accent);
+  animation: lf-equalizer 1.2s steps(2, end) infinite;
+  transform: none;
+}
+
+#app .panel-root .radio-wave .wave-bar:nth-child(1) {
+  clip-path: inset(4px 0 0);
+}
+
+#app .panel-root .radio-wave .wave-bar:nth-child(2) {
+  animation-delay: 0.2s;
+  clip-path: inset(0);
+}
+
+#app .panel-root .radio-wave .wave-bar:nth-child(3) {
+  animation-delay: 0.4s;
+  clip-path: inset(8px 0 0);
+}
+
+@keyframes lf-equalizer {
+  0%,
+  100% {
+    clip-path: inset(8px 0 0);
+  }
+
+  50% {
+    clip-path: inset(0);
+  }
+}
+
+#app .panel-root .card-grid {
+  gap: 8px;
+}
+
+#app .panel-root .card-grid .task-card {
+  gap: 12px;
+  padding: 12px;
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  border-radius: 12px;
+}
+
+#app .panel-root .card-grid .task-card:hover {
+  background: color-mix(in srgb, var(--v2-accent) 7%, var(--v2-surface));
+  border-color: color-mix(in srgb, var(--v2-accent) 25%, var(--v2-line));
+  transform: none;
+}
+
+#app .panel-root .card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--ui-well);
+  color: var(--v2-accent);
+}
+
+#app .panel-root .today-icon,
+#app .panel-root .tomorrow-icon,
+#app .panel-root .week-icon,
+#app .panel-root .done-icon {
+  background: var(--ui-well);
+  color: var(--v2-accent);
+}
+
+#app .panel-root .card-count {
+  font-size: 20px;
+}
+
+/* ===== TODO ===== */
+#app .panel-root .todo-page {
+  gap: 12px;
+}
+
+#app .panel-root .todo-page .todo-header {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--v2-line);
+}
+
+#app .panel-root .todo-page .quick-add {
+  padding: 0;
+  gap: 8px;
+}
+
+#app .panel-root .todo-page .quick-add-input-row {
+  gap: 0;
+  overflow: visible;
+  min-width: 0;
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  border-radius: 8px;
+}
+
+#app .panel-root .todo-page .quick-add-input {
+  min-width: 96px;
+  height: 34px;
+  min-height: 34px;
+  padding: 6px 9px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+#app .panel-root .todo-page .inline-chip {
+  min-height: 30px;
+  gap: 2px;
+  padding: 4px 7px;
+  color: var(--v2-muted);
+  font-size: 10.5px;
+}
+
+#app .panel-root .todo-page .inline-chip svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+#app .panel-root .todo-page .chip-label {
+  max-width: 48px;
+}
+
+#app .panel-root .todo-page .task-list {
+  padding-inline: 0;
+  gap: 8px;
+}
+
+#app .panel-root .todo-page .subtask-checkbox {
+  border-radius: 4px;
+  border-width: 2px;
+}
+
+#app .panel-root .todo-page .subtask-checkbox.checked {
+  border-color: color-mix(in srgb, var(--v2-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--v2-accent) 15%, transparent);
+  color: var(--v2-accent);
+}
+
+#app .panel-root .todo-page .task-row {
+  min-width: 0;
+  min-height: 28px;
+  gap: 8px;
+}
+
+#app .panel-root .todo-page .task-card {
+  padding: 10px 12px;
+  gap: 4px;
+  background: var(--v2-surface);
+  border-color: transparent;
+  border-radius: 8px;
+}
+
+#app .panel-root .todo-page .task-card:hover {
+  background: color-mix(in srgb, var(--v2-accent) 7%, var(--v2-surface));
+  border-color: var(--v2-line);
+}
+
+#app .panel-root .todo-page .task-card.is-running {
+  background: color-mix(in srgb, var(--v2-accent) 10%, var(--v2-surface));
+  border-color: color-mix(in srgb, var(--v2-accent) 30%, transparent);
+  border-left: 3px solid var(--v2-accent);
+}
+
+#app .panel-root .todo-page .empty-state {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .todo-page .tab-item {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .todo-page .tab-item.active {
+  color: var(--v2-accent);
+}
+
+@media (max-width: 399px) {
+  #app .panel-root .todo-page .quick-add-input-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0;
+  }
+
+  #app .panel-root .todo-page .quick-add-input {
+    order: -1;
+    grid-column: 1 / -1;
+    width: 100%;
+    border-bottom: 1px solid var(--v2-line);
+  }
+
+  #app .panel-root .todo-page .group-chip {
+    border-right: 0;
+  }
+
+  #app .panel-root .todo-page .inline-chip {
+    justify-content: center;
+  }
+}
+
+/* ===== 备忘 ===== */
+#app .panel-root .memo-page {
+  gap: 12px;
+}
+
+#app .panel-root .memo-page .memo-header {
+  padding: 8px 0;
+}
+
+#app .panel-root .memo-page .memo-list {
+  padding-inline: 0;
+  padding-top: 10px;
+}
+
+#app .panel-root .memo-page:has(.memo-editor) {
+  padding: 0;
+  gap: 0;
+}
+
+#app .panel-root .memo-item,
+#app .panel-root .tasklist-card,
+#app .panel-root .memo-card {
+  padding: 16px;
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  border-radius: 12px;
+}
+
+/* TODO 与备忘使用适中的留白：列表间距 8px、卡片横向内边距 12px。 */
+#app .panel-root .memo-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  border-color: transparent;
+}
+
+#app .panel-root .memo-item.is-pinned {
+  border-color: var(--v2-line);
+}
+
+#app .panel-root .memo-item-title,
+#app .panel-root .memo-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+#app .panel-root .memo-item-preview,
+#app .panel-root .memo-preview {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#app .panel-root .memo-editor {
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+  color: var(--v2-ink);
+}
+
+#app .panel-root .editor-top-bar {
+  padding: 0;
+  border: 0;
+  min-height: 26px;
+  gap: 8px;
+}
+
+#app .panel-root .editor-title-area {
+  padding: 0;
+  gap: 12px;
+  min-height: 32px;
+}
+
+#app .panel-root .editor-toolbar {
+  padding: 0 0 12px;
+  gap: 8px;
+  min-height: 44px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--v2-line);
+}
+
+#app .panel-root .toolbar-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--ui-well);
+  border: 1px solid transparent;
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .toolbar-btn:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .toolbar-btn.active {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .toolbar-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0;
+  background: var(--v2-line);
+}
+
+#app .panel-root .editor-content-wrapper {
+  min-height: 0;
+  padding: 0 0 16px;
+  scroll-padding-bottom: 16px;
+  overscroll-behavior: contain;
+}
+
+#app .panel-root .editor-content {
+  min-height: 100%;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--v2-ink);
+}
+
+#app .panel-root .save-time {
+  font-size: 12px;
+  margin: 0;
+}
+
+#app .panel-root .editor-top-bar .page-back-btn {
+  width: 26px;
+  height: 26px;
+}
+
+#app .panel-root .editor-top-bar .page-back-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ===== 足迹 / 统计 ===== */
+#app .panel-root .records-overview {
+  padding: 16px;
+  background: radial-gradient(ellipse at 90% 0, var(--v2-glow), transparent 75%), var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  border-radius: 18px;
+}
+
+#app .panel-root .stats-page .stat-card {
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  border-radius: 12px;
+}
+
+#app .panel-root .stats-page .stat-value,
+#app .panel-root .records-intro .stat-number,
+#app .panel-root .records-number .stat-number {
+  /* 四列卡片很窄：数值随窗口缩放，避免“0 分钟”被挤成两行 */
+  font-size: clamp(15px, 4.4vw, 19px);
+  white-space: nowrap;
+}
+
+#app .panel-root .stats-page .stat-value,
+#app .panel-root .stats-page .page-title {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .stats-page .stat-label,
+#app .panel-root .stats-page .weekday,
+#app .panel-root .stats-page .day-number,
+#app .panel-root .stats-page .section-title {
+  color: var(--v2-muted);
+}
+
+/* 热力图上落在强调色格子里的日期必须用 on-accent，避免灰字压在棕底上 */
+#app .panel-root .stats-page .heat-cell.intensity-3 .day-number {
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .stats-page .section {
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  border-radius: 12px;
+}
+
+#app .panel-root .stats-page .time-range-tabs {
+  background: var(--ui-well);
+}
+
+#app .panel-root .stats-page .tab {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .stats-page .tab.active {
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .stats-page .nav-btn,
+#app .panel-root .stats-page .back-btn {
+  background: var(--ui-well);
+  border: 1px solid var(--v2-line);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .stats-page .nav-btn:hover,
+#app .panel-root .stats-page .back-btn:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .records-intro h2 {
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+#app .panel-root .records-intro p,
+#app .panel-root .records-mode .section-hint,
+#app .panel-root .records-mode .stat-label {
+  font-size: 12px;
+}
+
+#app .panel-root .records-numbers {
+  gap: 16px;
+  margin-top: 20px;
+}
+
+#app .panel-root .records-number .stat-number {
+  font-size: 28px;
+}
+
+#app .panel-root .records-mode .section {
+  padding: 12px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+#app .panel-root .heat-cell {
+  border-radius: 0;
+}
+
+#app .panel-root .calendar-activity {
+  height: 4px;
+}
+
+#app .panel-root .calendar-activity i {
+  width: 4px;
+  height: 4px;
+  border-radius: 0;
+}
+
+#app .panel-root .trend-bar {
+  width: 16px;
+  max-width: 16px;
+  border-radius: 0;
+  background: repeating-linear-gradient(to top, var(--v2-accent) 0 4px, transparent 4px 8px);
+}
+
+#app .panel-root .charts-row {
+  gap: 20px;
+}
+
+#app .panel-root .achievement-badge {
+  padding: 12px 4px;
+  background: var(--ui-well);
+  border: 0;
+  border-radius: 8px;
+}
+
+#app .panel-root .achievement-badge .badge-icon {
+  width: 32px;
+  height: 32px;
+  margin: auto auto 8px;
+  font-size: 18px;
+}
+
+#app .panel-root .badge-name {
+  font-size: 12px;
+}
+
+#app .panel-root .achievement-note {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 349px) {
+  #app .panel-root .calendar-activity {
+    height: 3px;
+  }
+
+  #app .panel-root .calendar-activity i {
+    width: 3px;
+    height: 3px;
+  }
+}
+
+/* ===== 电台 ===== */
+#app .panel-root .radio-page .now-playing {
+  padding: 0 0 var(--space-heading);
+  flex: none;
+}
+
+#app .panel-root .radio-content {
+  padding: var(--space-card);
+  background: radial-gradient(ellipse at 50% 0, var(--v2-glow), transparent 65%), var(--v2-surface);
+  border: 1px solid var(--v2-line);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+#app .panel-root .radio-page .station-info {
+  min-width: 0;
+  gap: 8px;
+}
+
+#app .panel-root .radio-page .station-name {
+  font-size: 17px;
+  line-height: 1.4;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#app .panel-root .radio-page :is(.station-desc, .item-desc) {
+  min-width: 0;
+  max-width: 100%;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+  font-size: 12px;
+}
+
+#app .panel-root .radio-page .station-list-wrapper {
+  padding: 0 0 16px;
+  scroll-padding-bottom: 16px;
+  overscroll-behavior: contain;
+}
+
+#app .panel-root .radio-page .import-bar {
+  margin: 0;
+  padding: 12px;
+  gap: 8px;
+}
+
+#app .panel-root .radio-page .live-bars,
+#app .panel-root .radio-page .playing-indicator {
+  height: 12px;
+  gap: 4px;
+}
+
+#app .panel-root .radio-page .live-bars span,
+#app .panel-root .radio-page .playing-indicator span {
+  width: 4px;
+  height: 12px !important;
+  border-radius: 0;
+  animation: lf-equalizer 1s steps(2, end) infinite;
+  transform: none;
+}
+
+#app .panel-root .radio-page .live-bars span:nth-child(2),
+#app .panel-root .radio-page .playing-indicator span:nth-child(2) {
+  animation-delay: -0.25s;
+}
+
+#app .panel-root .radio-page .live-bars span:nth-child(3),
+#app .panel-root .radio-page .playing-indicator span:nth-child(3) {
+  animation-delay: -0.5s;
+}
+
+#app .panel-root .radio-page .live-bars span:nth-child(4) {
+  animation-delay: -0.75s;
+}
+
+#app .panel-root .radio-page .live-bars.paused span {
+  animation-play-state: paused;
+}
+
+/* ===== 通知 ===== */
+#app .panel-root .notif-page {
+  gap: 0;
+  padding-bottom: 12px;
+}
+
+#app .panel-root .notif-page > .section-head {
+  order: 0;
+  flex: none;
+  min-height: 0;
+  padding: 0;
+  margin: 0 0 6px;
+  gap: 8px;
+}
+
+#app .panel-root .notif-page > .section-head > .section-title {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+#app .panel-root .record-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+#app .panel-root .record-tools .text-btn {
+  padding: 3px 5px;
+}
+
+#app .panel-root .notif-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  gap: 14px;
+}
+
+#app .panel-root .notif-group {
+  margin: 0 0 10px;
+}
+
+#app .panel-root .notif-item {
+  padding: 9px 11px;
+  gap: 8px;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--v2-line);
+  border-radius: 0;
+}
+
+#app .panel-root .notif-item.unread {
+  background: var(--v2-surface);
+  border-radius: 10px;
+}
+
+#app .panel-root .notif-item.expanded {
+  box-shadow: inset 0 0 0 1px var(--v2-line);
+}
+
+#app .panel-root .notif-item:hover {
+  background: var(--ui-hover);
+}
+
+#app .panel-root .notif-dot {
+  flex: 0 0 5px;
+  width: 5px;
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--v2-accent);
+}
+
+#app .panel-root .notif-app {
+  color: var(--v2-secondary);
+  background: var(--ui-well);
+}
+
+#app .panel-root .notif-blocked {
+  color: var(--v2-muted);
+  border-color: var(--v2-line);
+  border-left-color: var(--v2-line);
+}
+
+#app .panel-root .notif-action-status {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .notif-action-status.error {
+  color: var(--v2-danger);
+}
+
+#app .panel-root .notif-item:not(.unread) .notif-dot {
+  background: var(--v2-line);
+}
+
+#app .panel-root .notif-body,
+#app .panel-root .notif-line {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#app .panel-root .notif-time {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+#app .panel-root .notif-title,
+#app .panel-root .notif-detail {
+  overflow-wrap: anywhere;
+}
+
+#app .panel-root .notif-title {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+#app .panel-root .notif-detail {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+#app .panel-root .notif-item.expanded .notif-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+#app .panel-root .notif-item.expanded .notif-app {
+  max-width: 100%;
+  width: fit-content;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+#app .panel-root .notif-item.expanded .notif-time {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+}
+
+#app .panel-root .notif-item.expanded .notif-title {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+#app .panel-root .notif-item.expanded .notif-line:not(:has(.notif-app)) .notif-title {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+#app .panel-root .notif-actions {
+  flex-shrink: 0;
+  gap: 4px;
+  margin-top: 8px;
+  max-width: 100%;
+}
+
+#app .panel-root .copy-btn {
+  flex: 0 0 56px;
+  width: 56px;
+  min-width: 56px;
+  min-height: 24px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--ui-well);
+  color: var(--v2-secondary);
+  font-size: 10.5px;
+  line-height: 14px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+#app .panel-root .copy-btn:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .copy-btn:disabled {
+  opacity: 0.45;
+}
+
+/* ===== 设置 ===== */
+#app .panel-root .settings-page {
+  gap: 0;
+}
+
+#app .panel-root .settings-page .settings-header {
+  min-height: 26px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+#app .panel-root .settings-page .settings-header + .settings-section {
+  padding-top: 4px;
+}
+
+#app .panel-root .settings-page .settings-header .page-back-btn,
+#app .panel-root .settings-page .settings-header .about-btn {
+  border: 1px solid var(--v2-line);
+  border-radius: 8px;
+  background: var(--ui-well);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .settings-page .settings-header .about-btn {
+  width: 28px;
+  height: 28px;
+}
+
+#app .panel-root .settings-page .settings-header .page-back-btn:hover,
+#app .panel-root .settings-page .settings-header .about-btn:hover {
+  background: var(--ui-hover);
+  border-color: var(--ui-line-medium);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-section {
+  padding: 10px 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--v2-line);
+  border-radius: 0;
+}
+
+#app .panel-root .settings-section:first-child {
+  padding-top: 4px;
+}
+
+#app .panel-root .settings-page .section-title {
+  font-size: 11px;
+  font-weight: 650;
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+
+/* 镜像范围等“标签 + 控件”行：控件不能被全局 width:100% 拉满，否则标签被挤到折行 */
+#app .panel-root .settings-page .setting-option-row {
+  gap: 8px;
+}
+
+#app .panel-root .settings-page .setting-option-row .update-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+#app .panel-root .settings-page .setting-option-row .mode-toggle {
+  width: auto;
+  max-width: none;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+#app .panel-root .settings-page .setting-option-row .mode-btn {
+  flex: 0 1 auto;
+  padding: 0 14px;
+}
+
+#app .panel-root .settings-page .mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  padding: 3px;
+  background: var(--ui-well);
+  border: 1px solid var(--v2-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#app .panel-root .settings-page .mode-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--v2-muted);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+#app .panel-root .settings-page .mode-btn + .mode-btn {
+  border-left: 0;
+}
+
+#app .panel-root .settings-page .mode-btn:hover {
+  background: transparent;
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-page .mode-btn.active {
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+#app .panel-root .settings-page .theme-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+#app .panel-root .settings-page .theme-card {
+  padding: 12px;
+  background: var(--v2-surface);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+#app .panel-root .settings-page .theme-card.active {
+  border-color: var(--v2-accent);
+}
+
+#app .panel-root .settings-page .theme-name {
+  font-size: 12px;
+}
+
+@media (max-width: 349px) {
+  #app .panel-root .settings-page .theme-grid {
+    gap: 8px;
+  }
+
+  #app .panel-root .settings-page .theme-card {
+    padding: 10px 6px;
+  }
+
+  #app .panel-root .settings-page .theme-name {
+    font-size: 10px;
+  }
+}
+
+#app .panel-root .settings-page .switch input:checked + .switch-track {
+  background: var(--v2-accent);
+}
+
+/* 番茄钟时长行不再垫灰色底：那层没有圆角的底看起来像第二层材质 */
+#app .panel-root .settings-page .duration-cell {
+  background: transparent;
+  border: 0;
+}
+
+#app .panel-root .settings-page .stepper {
+  background: var(--v2-surface);
+  border: 1px solid var(--v2-line);
+}
+
+/* 一级说明：紧跟控件的解释文字 */
+#app .panel-root .settings-page :is(.update-hint, .email-hint, .shortcut-hint, .opacity-hint) {
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+#app .panel-root .settings-page.blurred {
+  filter: none;
+}
+
+#app .panel-root .email-input {
+  min-height: 30px;
+  padding: 6px 9px;
+}
+
+#app .panel-root .settings-page .section-subtitle {
+  color: var(--v2-muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  margin: 6px 0 4px;
+}
+
+#app .panel-root .settings-page .mode-btn {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .settings-page .mode-btn:hover {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-page .mode-btn.active {
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .settings-page .update-btn {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--v2-line);
+  border-radius: 8px;
+  background: var(--ui-well);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .settings-page .update-btn:hover:not(:disabled) {
+  background: var(--ui-hover);
+  border-color: var(--ui-line-medium);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-page .update-btn.primary {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .settings-page .update-btn.danger {
+  background: color-mix(in srgb, var(--v2-danger) 8%, transparent);
+  border-color: color-mix(in srgb, var(--v2-danger) 26%, transparent);
+  color: var(--v2-danger);
+}
+
+#app .panel-root .settings-page .switch-track {
+  background: var(--ui-well);
+  border: 1px solid var(--v2-line);
+}
+
+#app .panel-root .settings-page .switch-track::after {
+  background: var(--v2-surface);
+}
+
+#app .panel-root .settings-page .switch input:checked + .switch-track {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+}
+
+#app .panel-root .settings-page .switch input:checked + .switch-track::after {
+  background: var(--v2-on-accent);
+}
+
+#app .panel-root .settings-page .stepper-btn {
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .settings-page .stepper-btn:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-page .stepper-value,
+#app .panel-root .settings-page .duration-label,
+#app .panel-root .settings-page .duration-unit,
+#app .panel-root .settings-page .update-status {
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .settings-page .shortcut-row {
+  flex-wrap: wrap;
+}
+
+#app .panel-root .settings-page .shortcut-label {
+  color: var(--v2-secondary);
+  white-space: nowrap;
+}
+
+#app .panel-root .settings-page .shortcut-recorder {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-page .shortcut-hint {
+  flex: 1 0 100%;
+}
+
+#app .panel-root .settings-page .shortcut-recorder:hover {
+  background: var(--ui-hover);
+  border-color: var(--ui-line-medium);
+}
+
+#app .panel-root .settings-page .mirror-chip {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .settings-page .mirror-chip:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-page .mirror-chip.muted {
+  border-color: var(--v2-line);
+  color: var(--v2-muted);
+}
+
+#app .panel-root .settings-page .mirror-chip.selected {
+  border-color: color-mix(in srgb, var(--v2-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--v2-accent) 12%, transparent);
+  color: var(--v2-accent);
+}
+
+#app .panel-root .settings-page .email-provider-option {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .settings-page .email-provider-option:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .settings-page .email-provider-option.active {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .settings-page .email-status {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .settings-page .email-status.success {
+  color: var(--v2-break);
+}
+
+#app .panel-root .settings-page .email-status.error {
+  color: var(--v2-danger);
+}
+
+#app .panel-root .calendar-picker {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .calendar-picker .quick-chip {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .calendar-picker .quick-chip:hover {
+  background: var(--ui-hover);
+  border-color: var(--v2-line);
+  color: var(--v2-ink);
+  transform: none;
+}
+
+#app .panel-root .calendar-picker .quick-chip.is-active {
+  background: var(--v2-accent) !important;
+  border-color: var(--v2-accent) !important;
+  color: var(--v2-on-accent) !important;
+}
+
+#app .panel-root .calendar-picker .clear-chip {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .calendar-picker .divider {
+  background: var(--v2-line);
+}
+
+#app .panel-root .calendar-picker .month-title {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .calendar-picker .nav-btn {
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .calendar-picker .nav-btn:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .calendar-picker .weekdays-grid {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .calendar-picker .weekdays-grid .weekend {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .calendar-picker .day-cell {
+  color: var(--v2-ink);
+  border-radius: 4px;
+}
+
+#app .panel-root .calendar-picker .day-cell:hover {
+  background: var(--ui-hover);
+  color: var(--v2-ink);
+  transform: none;
+}
+
+#app .panel-root .calendar-picker .day-cell.other-month {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .calendar-picker .day-cell.is-selected {
+  background: var(--v2-accent) !important;
+  color: var(--v2-on-accent) !important;
+  transform: none;
+}
+
+#app .panel-root .calendar-picker .today-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 0;
+  background: var(--v2-accent);
+}
+
+#app .panel-root .repeat-picker {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .repeat-picker .mode-tabs {
+  background: var(--ui-well);
+}
+
+#app .panel-root .repeat-picker .mode-tab {
+  background: transparent;
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .repeat-picker .mode-tab.active {
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .repeat-picker .month-title,
+#app .panel-root .repeat-picker .picker-summary {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .repeat-picker .nav-btn,
+#app .panel-root .repeat-picker .time-label,
+#app .panel-root .repeat-picker .time-clear {
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .repeat-picker .weekdays {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .repeat-picker .day-cell {
+  color: var(--v2-ink);
+  border-radius: 4px;
+}
+
+#app .panel-root .repeat-picker .day-cell.muted {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .repeat-picker .day-cell.selected,
+#app .panel-root .repeat-picker .day-cell.in-range {
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .repeat-picker .time-input {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+  color: var(--v2-ink);
+}
+
+#app .panel-root .repeat-picker .footer-btn {
+  background: var(--ui-well);
+  color: var(--v2-secondary);
+  border-color: var(--v2-line);
+}
+
+#app .panel-root .repeat-picker .footer-btn.primary {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+/* ===== 弹窗 ===== */
+#app .panel-root .dialog-backdrop,
+#app .panel-root .delete-dialog-overlay,
+#app .panel-root .about-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 12px;
+  background: color-mix(in srgb, #000 30%, transparent);
+  backdrop-filter: none;
+  z-index: 2000;
+}
+
+#app .panel-root .dialog-container,
+#app .panel-root .delete-dialog,
+#app .panel-root .about-dialog {
+  position: relative;
+  inset: auto;
+  transform: none;
+  width: min(360px, 100%);
+  max-height: 100%;
+  margin: 0;
+  overflow: auto;
+  background: var(--v2-popover);
+  border: 1px solid var(--v2-line);
+  border-radius: 16px;
+  color: var(--v2-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 16px 40px var(--v2-shadow);
+}
+
+#app .panel-root dialog {
+  inset: 0;
+  margin: auto;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  background: var(--v2-popover);
+  color: var(--v2-ink);
+  border: 1px solid var(--v2-line);
+  border-radius: 16px;
+  filter: none;
+}
+
+#app .panel-root dialog::backdrop {
+  background: color-mix(in srgb, #000 30%, transparent);
+  backdrop-filter: none;
+}
+
+#app .panel-root .dialog-container :is(.group-item, .add-group-form) {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+}
+
+#app .panel-root .dialog-container :is(.form-btn, .cancel-btn) {
+  background: var(--ui-well);
+  border-color: var(--v2-line);
+  color: var(--v2-secondary);
+}
+
+#app .panel-root .dialog-container .confirm-btn {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+#app .panel-root .dialog-container .color-label {
+  color: var(--v2-muted);
+}
+
+#app .panel-root .memo-category-dropdown .dropdown-menu {
+  background: var(--v2-popover);
+  border: 1px solid var(--v2-line);
+  box-shadow: 0 8px 24px var(--v2-shadow);
+}
+
+#app .panel-root .memo-category-dropdown :is(.dropdown-trigger, .item-name) {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .memo-category-dropdown .dropdown-item:hover {
+  background: var(--ui-hover);
+}
+
+#app .panel-root .memo-category-dropdown .dropdown-footer {
+  border-color: var(--v2-line);
+}
+
+/* 像素空状态：24px 画布 + 方点 */
+#app .panel-root :is(.empty-state, .notification-records > .empty, .memo-empty-state)::before {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 0 auto 16px;
+  background: var(--v2-accent);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, 12.5% 12.5%, 12.5% 87.5%, 87.5% 87.5%, 87.5% 12.5%, 12.5% 12.5%);
+}
+
+#app .panel-root .todo-page .empty-state > svg {
+  display: none;
+}
+
+#app .panel-root .memo-empty-state .empty-icon {
+  display: none;
+}
+
+#app .panel-root :is(.heat-cell:hover, .achievement-badge:hover, .badge-icon, .album-thumbnail, .collection-art) {
+  transform: none !important;
+}
+
+@media (max-width: 349px) {
+  #app .panel-root .focus-hero {
+    padding: 16px 12px;
+  }
+
+  #app .panel-root .hero-meta {
+    flex-wrap: wrap;
+  }
+}
+
+/* ===== 像素点缀：区块标记 / 取景角 / 硬边投影 ===== */
+#app .panel-root :is(.focus-zone .zone-header, .settings-page .section-title, .stats-page .section-title, .memo-page .section-title) {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#app .panel-root :is(.focus-zone .zone-header, .settings-page .section-title, .stats-page .section-title, .memo-page .section-title)::before {
+  content: '';
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--v2-accent);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--v2-accent) 28%, transparent);
+}
+
+#app .panel-root .focus-hero::before,
+#app .panel-root .focus-hero::after {
+  content: '';
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border: 2px solid color-mix(in srgb, var(--v2-accent) 34%, transparent);
+  pointer-events: none;
+}
+
+#app .panel-root .focus-hero::before {
+  top: 9px;
+  left: 9px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+#app .panel-root .focus-hero::after {
+  top: 9px;
+  right: 9px;
+  border-left: 0;
+  border-bottom: 0;
+}
+
+@media (max-width: 349px) {
+  /* 窄面板：热力图标题独占一行，避免“2026年11月”被拆行 */
+  #app .panel-root .stats-page .section-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  #app .panel-root .stats-page .section-header .section-title {
+    white-space: nowrap;
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #app .panel-root :is(.live-bars span, .playing-indicator span, .radio-wave .wave-bar) {
+    animation: none !important;
+  }
+}
+
+/* 统一排版层级：页面标题 > 区块标题 > 行标签 > 辅助文字 */
+#app .panel-root .settings-page .section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--v2-secondary);
+  margin-bottom: 8px;
+}
+
+#app .panel-root .settings-page .slider-label,
+#app .panel-root .settings-page .update-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--v2-ink);
+}
+
+/* 邮箱区标签比普通设置项轻一档，授权码/账号信息不应比标题更抢眼 */
+#app .panel-root .settings-page .email-settings-section .update-label {
+  font-weight: 400;
+}
+
+#app .panel-root .settings-page .email-settings-section .section-title {
+  font-weight: 500;
+}
+
+#app .panel-root .settings-page .email-settings-section :is(input, button, .email-status) {
+  font-weight: 400;
+}
+
+#app .panel-root .settings-page .slider-value,
+#app .panel-root .settings-page .opacity-value {
+  font-size: 11px;
+  color: var(--v2-muted);
+}
+
+/* 二级/脚注：状态、计数、来源、标语说明，比一级说明小一档，拉开层级 */
+#app .panel-root .settings-page :is(.update-status, .email-status, .source-status, .mirror-empty, .motto-hint) {
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--v2-muted);
+}
+
+#app .panel-root .todo-page .task-title,
+#app .panel-root .todo-page .task-title-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-ink);
+}
+
+#app .panel-root .todo-page .task-meta,
+#app .panel-root .todo-page .task-time,
+#app .panel-root .todo-page .task-subtitle {
+  font-size: 11px;
+  color: var(--v2-muted);
+}
+
+#app .panel-root .notif-page .page-title {
+  color: var(--v2-ink);
+}
+
+#app .panel-root .notif-page .notif-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--v2-ink);
+}
+
+#app .panel-root .notif-page .notif-detail {
+  font-size: 11px;
+  color: var(--v2-muted);
+}

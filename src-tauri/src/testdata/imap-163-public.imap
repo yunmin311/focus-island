@@ -1,0 +1,5 @@
+* OK Coremail System IMap Server Ready
+* CAPABILITY IMAP4rev1 XLIST SPECIAL-USE ID LITERAL+ STARTTLS APPENDLIMIT=71680000 XAPPLEPUSHSERVICE UIDPLUS X-CM-EXT-1 SASL-IR AUTH=XOAUTH2
+A1 OK CAPABILITY completed
+* ID ("name" "Coremail Imap" "vendor" "Mailtech" "TransID" "[redacted]")
+A2 OK ID completed

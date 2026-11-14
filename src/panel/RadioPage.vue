@@ -1,0 +1,1162 @@
+<script setup lang="ts">
+import { computed, ref, nextTick } from 'vue'
+import { useRadio, CATEGORY_LABELS, type StationCategory, type RadioStation } from '../composables/useRadio'
+
+const {
+  stations, currentStation, playing, loading, error, volume,
+  currentTime, duration, seekable, progress, seekTo,
+  toggle, switchStation, setVolume,
+  importFromUrl, importFromFile, removeCustomStation, renameCustomStation,
+} = useRadio()
+
+const isLocalMedia = computed(() => {
+  const station = currentStation.value
+  if (!station) return false
+  return station.streamUrl === '__LOCAL__'
+    || station.streamUrl === '__RESOLVE__'
+    || /\.(mp3|m4a|aac|ogg|opus|wav|flac)(\?|#|$)/i.test(station.streamUrl)
+})
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
+  const total = Math.floor(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+const progressTrack = ref<HTMLElement | null>(null)
+const dragging = ref(false)
+
+function ratioFromEvent(event: PointerEvent): number {
+  const el = progressTrack.value
+  if (!el) return 0
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0) return 0
+  return Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+}
+
+function onSeekDown(event: PointerEvent) {
+  if (!seekable.value) return
+  dragging.value = true
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  seekTo(ratioFromEvent(event) * duration.value)
+}
+
+function onSeekMove(event: PointerEvent) {
+  if (!dragging.value) return
+  seekTo(ratioFromEvent(event) * duration.value)
+}
+
+function onSeekUp(event: PointerEvent) {
+  if (!dragging.value) return
+  dragging.value = false
+  const el = event.currentTarget as HTMLElement
+  if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId)
+}
+
+const renamingId = ref('')
+const renamingValue = ref('')
+
+function startRename(station: RadioStation, event: Event) {
+  event.stopPropagation()
+  renamingId.value = station.id
+  renamingValue.value = station.name
+}
+
+function commitRename(station: RadioStation) {
+  if (renamingId.value === station.id) {
+    const name = renamingValue.value.trim()
+    if (name && name !== station.name) renameCustomStation(station.id, name)
+    renamingId.value = ''
+  }
+}
+
+const stationsByCategory = computed(() => {
+  const grouped = new Map<StationCategory, RadioStation[]>()
+  stations.value.forEach(station => {
+    if (!grouped.has(station.category)) {
+      grouped.set(station.category, [])
+    }
+    grouped.get(station.category)!.push(station)
+  })
+  return grouped
+})
+
+// ---- 导入外部歌单 / 视频链接（只播音频） ----
+
+const importUrl = ref('')
+const importing = ref(false)
+const importMsg = ref<string | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+async function doImportUrl() {
+  const url = importUrl.value.trim()
+  if (!url || importing.value) return
+  importing.value = true
+  importMsg.value = null
+  try {
+    const n = await importFromUrl(url)
+    importMsg.value = `已导入 ${n} 个条目`
+    importUrl.value = ''
+  } catch (e) {
+    importMsg.value = typeof e === 'string' ? e : (e as Error).message || '导入失败'
+  } finally {
+    importing.value = false
+  }
+}
+
+async function doImportFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || importing.value) return
+  importing.value = true
+  importMsg.value = null
+  try {
+    const n = await importFromFile(file)
+    importMsg.value = `已导入 ${n} 个条目`
+  } catch (e) {
+    importMsg.value = typeof e === 'string' ? e : (e as Error).message || '导入失败'
+  } finally {
+    importing.value = false
+  }
+}
+
+function removeStation(id: string, event: Event) {
+  event.stopPropagation()
+  removeCustomStation(id)
+}
+
+const scrollContainer = ref<HTMLElement | null>(null)
+const showScrollToPlaying = ref(false)
+
+function handleScroll() {
+  if (!scrollContainer.value) return
+  // 滚动超过 50px 时显示快速定位按钮
+  showScrollToPlaying.value = scrollContainer.value.scrollTop > 50
+}
+
+async function scrollToPlaying() {
+  if (!currentStation.value) return
+  await nextTick()
+  const activeItem = document.querySelector('.station-item.active')
+  if (activeItem) {
+    activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+</script>
+
+<template>
+  <div class="radio-page">
+    <!-- Now Playing (Fixed) -->
+    <div class="now-playing">
+      <div class="radio-frame">
+        <div class="radio-glow" />
+        <div class="radio-content">
+          <div class="station-info">
+            <div class="station-name">{{ currentStation?.name ?? '选择一个电台' }}</div>
+            <div class="station-desc">{{ currentStation?.description ?? '让音乐陪伴你的专注时光' }}</div>
+          </div>
+          <div class="player-controls">
+            <button
+              class="play-btn"
+              :class="{ 'is-playing': playing }"
+              :disabled="!currentStation"
+              @click="toggle"
+            >
+              <svg v-if="loading" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="7" cy="12" r="1.8" opacity="0.3" />
+                <circle cx="12" cy="12" r="1.8" opacity="0.6" />
+                <circle cx="17" cy="12" r="1.8" />
+              </svg>
+              <svg v-else-if="playing" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="7" y="5" width="3.5" height="14" rx="1" />
+                <rect x="13.5" y="5" width="3.5" height="14" rx="1" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.5 5.3v13.4a1 1 0 0 0 1.45.9l11.1-6.7a1 1 0 0 0 0-1.8L8.95 4.4a1 1 0 0 0-1.45.9Z" />
+              </svg>
+            </button>
+            <div class="volume-row">
+              <svg class="vol-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+              </svg>
+              <input
+                type="range"
+                class="volume-slider"
+                min="0"
+                max="100"
+                :value="volume"
+                @input="setVolume(Number(($event.target as HTMLInputElement).value))"
+              />
+              <span class="vol-value">{{ volume }}</span>
+            </div>
+          </div>
+          <div v-if="currentStation" class="timeline">
+            <template v-if="isLocalMedia">
+              <span class="time-label">{{ formatTime(currentTime) }}</span>
+              <div
+                ref="progressTrack"
+                class="progress-track"
+                :class="{ disabled: !seekable, dragging }"
+                @pointerdown="onSeekDown"
+                @pointermove="onSeekMove"
+                @pointerup="onSeekUp"
+                @pointercancel="onSeekUp"
+              >
+                <div class="progress-fill" :style="{ width: `${progress * 100}%` }"></div>
+                <div class="progress-thumb" :style="{ left: `${progress * 100}%` }"></div>
+              </div>
+              <span class="time-label">{{ formatTime(duration) }}</span>
+            </template>
+            <template v-else>
+              <span class="live-badge">LIVE</span>
+              <div class="live-bars" :class="{ paused: !playing && !loading }">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <span class="live-hint">直播流 · 不可拖动</span>
+            </template>
+          </div>
+          <div v-if="error" class="error-msg">{{ error }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scrollable Content -->
+    <div class="station-list-wrapper" ref="scrollContainer" @scroll="handleScroll">
+      <!-- 导入外部歌单 / 视频链接 -->
+      <div class="import-bar glass-panel">
+        <input
+          v-model="importUrl"
+          class="import-input"
+          type="text"
+          placeholder="粘贴音频直链 / M3U 歌单 / 视频·合集链接（只播音频）"
+          @keydown.enter="doImportUrl"
+        />
+        <button class="import-btn" :disabled="importing || !importUrl.trim()" @click="doImportUrl">
+          {{ importing ? '导入中…' : '导入' }}
+        </button>
+        <button class="import-btn ghost" :disabled="importing" @click="fileInput?.click()">文件</button>
+        <input ref="fileInput" type="file" accept=".m3u,.m3u8,.pls,.txt" hidden @change="doImportFile" />
+        <div v-if="importMsg" class="import-msg">{{ importMsg }}</div>
+      </div>
+
+      <!-- Station List by Category -->
+      <div v-for="[category, categoryStations] in stationsByCategory" :key="category" class="category-section">
+        <div class="category-title">{{ CATEGORY_LABELS[category] }}</div>
+        <div class="station-list">
+          <button
+            v-for="station in categoryStations"
+            :key="station.id"
+            class="station-item"
+            :class="{ active: currentStation?.id === station.id }"
+            @click="switchStation(station.id)"
+          >
+            <div class="item-icon">
+              <!-- Code Radio: code brackets -->
+              <svg v-if="station.icon === 'code'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+              </svg>
+              <!-- Groove Salad: equalizer bars -->
+              <svg v-else-if="station.icon === 'wave'" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="13" width="3" height="7" rx="1" opacity="0.7" />
+                <rect x="8" y="9" width="3" height="11" rx="1" opacity="0.85" />
+                <rect x="13" y="6" width="3" height="14" rx="1" />
+                <rect x="18" y="11" width="3" height="9" rx="1" opacity="0.7" />
+              </svg>
+              <!-- Drone Zone: concentric waves -->
+              <svg v-else-if="station.icon === 'drone'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <circle cx="12" cy="12" r="3" />
+                <circle cx="12" cy="12" r="7" opacity="0.55" />
+                <circle cx="12" cy="12" r="11" opacity="0.25" />
+              </svg>
+              <!-- Deep Space One: planet with ring -->
+              <svg v-else-if="station.icon === 'planet'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <circle cx="12" cy="11" r="5" />
+                <ellipse cx="12" cy="11" rx="9" ry="3" transform="rotate(-18 12 11)" />
+              </svg>
+              <!-- Space Station: star sparkle -->
+              <svg v-else-if="station.icon === 'star'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2l1.5 6.5L20 9l-5 4.5L17 20l-5-3-5 3 1.5-7L4 9l6.5-.5z" />
+              </svg>
+              <!-- Ambient Pill: pill shape -->
+              <svg v-else-if="station.icon === 'pill'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <rect x="3" y="7" width="18" height="10" rx="5" />
+              </svg>
+              <!-- Lo-Fi / Coffee: coffee cup -->
+              <svg v-else-if="station.icon === 'coffee'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 8h1a4 4 0 1 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3" />
+              </svg>
+              <!-- Jazz: saxophone -->
+              <svg v-else-if="station.icon === 'jazz'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v20M8 6h8M7 10h10M7 14h10M8 18h8" />
+                <circle cx="12" cy="12" r="2" fill="currentColor" />
+              </svg>
+              <!-- Secret Agent: spy glass -->
+              <svg v-else-if="station.icon === 'spy'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+                <circle cx="11" cy="11" r="3" />
+              </svg>
+              <!-- DEF CON: hacker terminal -->
+              <svg v-else-if="station.icon === 'hacker'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <path d="M8 21h8M12 17v4M7 8l3 3-3 3M13 14h4" />
+              </svg>
+              <!-- 导入条目: link -->
+              <svg v-else-if="station.icon === 'link'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              <!-- 本地音乐: folder -->
+              <svg v-else-if="station.icon === 'folder'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" />
+              </svg>
+              <div v-if="currentStation?.id === station.id && playing" class="playing-indicator">
+                <span /><span /><span />
+              </div>
+            </div>
+            <div class="item-content">
+              <div class="item-header">
+                <input
+                  v-if="station.category === 'custom' && renamingId === station.id"
+                  v-model="renamingValue"
+                  class="rename-input"
+                  @keydown.enter="commitRename(station)"
+                  @blur="commitRename(station)"
+                />
+                <div
+                  v-else
+                  class="item-name"
+                  :style="station.category === 'custom' ? 'cursor: text' : ''"
+                  @dblclick="station.category === 'custom' && startRename(station, $event)"
+                >
+                  {{ station.name }}
+                </div>
+                <div class="item-tags">
+                  <span v-for="tag in station.tags.slice(0, 2)" :key="tag" class="tag">{{ tag }}</span>
+                </div>
+              </div>
+              <div class="item-desc">{{ station.description }}</div>
+            </div>
+            <button
+              v-if="station.category === 'custom' && renamingId !== station.id"
+              class="item-rename"
+              title="重命名（双击名称也可）"
+              @click="startRename(station, $event)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+            <button
+              v-if="station.category === 'custom' && renamingId !== station.id"
+              class="item-remove"
+              title="删除"
+              @click="removeStation(station.id, $event)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scroll to Playing Button -->
+    <transition name="fade-scale">
+      <button
+        v-if="showScrollToPlaying && currentStation"
+        class="scroll-to-playing-btn"
+        @click="scrollToPlaying"
+        title="定位到当前播放"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v8M8 12h8" />
+        </svg>
+      </button>
+    </transition>
+  </div>
+</template>
+
+<style scoped>
+@reference "../styles.css";
+
+.radio-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.now-playing {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: transparent;
+  border-bottom: 1px solid var(--v2-line);;
+  padding: 8px 12px;
+}
+
+.import-bar {
+  margin: 8px 10px 0;
+  padding: 7px 8px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px;
+  align-items: center;
+  border-radius: 10px;
+  position: relative;
+}
+
+.import-input {
+  grid-column: 1 / -1;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--v2-line);
+  background: var(--ui-well);
+  border-radius: 8px;
+  color: var(--v2-ink);
+  font-size: 10.5px;
+  line-height: 1.35;
+  padding: 6px 8px;
+  outline: none;
+}
+
+.import-input:focus {
+  border-color: var(--v2-muted);
+  background: var(--ui-well);
+}
+
+.import-btn {
+  border: 1px solid var(--v2-line);
+  background: var(--ui-well);
+  color: var(--v2-ink);
+  border-radius: 7px;
+  font-size: 10.5px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.import-btn:hover:not(:disabled) {
+  background: var(--ui-hover);
+}
+
+.import-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.import-msg {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--v2-secondary);
+}
+
+.item-rename {
+  display: none;
+  border: none;
+  background: transparent;
+  color: var(--v2-muted);
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.item-rename svg,
+.item-remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+.station-item:hover .item-rename {
+  display: block;
+}
+
+.item-rename:hover {
+  color: #7cc4ff;
+  background: rgba(124, 196, 255, 0.12);
+}
+
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--v2-line);;
+  background: var(--ui-well);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 12px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.item-remove {
+  align-self: center;
+  display: none;
+  border: none;
+  background: transparent;
+  color: var(--v2-muted);
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.station-item:hover .item-remove {
+  display: block;
+}
+
+.item-remove:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.radio-frame {
+  position: relative;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border-radius: 18px;
+  padding: 6px;
+  overflow: visible;
+}
+
+.radio-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  padding: 2px;
+  background: linear-gradient(135deg,
+    var(--focus-color) 0%,
+    color-mix(in srgb, var(--focus-color) 60%, #a855f7) 50%,
+    color-mix(in srgb, var(--focus-color) 40%, #06b6d4) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+}
+
+.radio-frame:hover::before {
+  opacity: 0.85;
+}
+
+.radio-glow {
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(circle at 50% 0%,
+    color-mix(in srgb, var(--focus-color) 15%, transparent) 0%,
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.now-playing:hover .radio-glow {
+  opacity: 1;
+}
+
+.radio-content {
+  position: relative;
+  background: linear-gradient(145deg,
+    rgba(28, 28, 32, 0.95) 0%,
+    rgba(20, 20, 24, 0.98) 100%
+  );
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--v2-line);;
+  transition: all 0.3s ease;
+}
+
+.now-playing:hover .radio-content {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 0 0 1px color-mix(in srgb, var(--focus-color) 10%, transparent);
+  transform: translateY(-1px);
+}
+
+.station-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.station-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--v2-ink);
+}
+
+.station-desc {
+  font-size: 12px;
+  color: var(--v2-muted);
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Timeline: local / imported audio progress, live stream indicator */
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 16px;
+}
+
+.time-label {
+  width: 36px;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.progress-track {
+  position: relative;
+  flex: 1;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.progress-track.disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.progress-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ui-hover);
+}
+
+.progress-fill {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--focus-color);
+  pointer-events: none;
+  transition: width 0.12s linear;
+}
+
+.progress-track.dragging .progress-fill {
+  transition: none;
+}
+
+.progress-thumb {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.progress-track:hover .progress-thumb,
+.progress-track.dragging .progress-thumb {
+  opacity: 1;
+}
+
+.live-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.live-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  flex: 1;
+}
+
+.live-bars span {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--focus-color) 70%, transparent);
+  animation: live-bar 1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.live-bars span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.live-bars span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.live-bars span:nth-child(4) {
+  animation-delay: 0.45s;
+}
+
+.live-bars.paused span {
+  animation-play-state: paused;
+  opacity: 0.4;
+}
+
+@keyframes live-bar {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+
+.live-hint {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--v2-muted);
+}
+
+.play-btn {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border: 2px solid var(--v2-line);;
+  border-radius: 50%;
+  color: var(--v2-ink);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.play-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--focus-color) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.play-btn:hover {
+  border-color: var(--v2-muted);
+  color: var(--v2-ink);
+  transform: scale(1.05);
+}
+
+.play-btn:hover::before {
+  opacity: 0.15;
+}
+
+.play-btn.is-playing {
+  background: linear-gradient(135deg, var(--focus-color) 0%, color-mix(in srgb, var(--focus-color) 85%, #000) 100%);
+  border-color: var(--focus-color);
+  color: var(--v2-ink);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--focus-color) 40%, transparent),
+              0 0 40px color-mix(in srgb, var(--focus-color) 20%, transparent);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.play-btn.is-playing::before {
+  opacity: 0;
+}
+
+.play-btn.is-playing:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 25px color-mix(in srgb, var(--focus-color) 50%, transparent),
+              0 0 50px color-mix(in srgb, var(--focus-color) 25%, transparent);
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px color-mix(in srgb, var(--focus-color) 40%, transparent),
+                0 0 40px color-mix(in srgb, var(--focus-color) 20%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 25px color-mix(in srgb, var(--focus-color) 50%, transparent),
+                0 0 50px color-mix(in srgb, var(--focus-color) 30%, transparent);
+  }
+}
+
+.play-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.play-btn:disabled:hover {
+  border-color: var(--v2-muted);
+  color: var(--v2-ink);
+  transform: none;
+}
+
+.play-btn:disabled::before {
+  opacity: 0;
+}
+
+.play-btn svg {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.error-msg {
+  font-size: 11px;
+  color: #e85d3a;
+}
+
+.volume-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vol-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--v2-muted);
+  flex-shrink: 0;
+}
+
+.volume-slider {
+  flex: 1;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.9) 100%);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3),
+              0 0 0 2px rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4),
+              0 0 0 3px color-mix(in srgb, var(--focus-color) 30%, transparent);
+}
+
+.volume-slider::-webkit-slider-thumb:active {
+  transform: scale(1.05);
+}
+
+.vol-value {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--v2-muted);
+  min-width: 20px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.station-list-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 16px;
+  overflow-y: auto;
+}
+
+.category-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.category-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--v2-secondary);
+  padding-left: 2px;
+  letter-spacing: 0.3px;
+}
+
+.station-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.station-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--ui-well);
+  border: 1px solid var(--v2-line);;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--v2-secondary);
+  text-align: left;
+}
+
+.station-item:hover {
+  background: var(--ui-well);
+  border-color: var(--v2-muted);
+  color: var(--v2-ink);
+}
+
+.station-item.active {
+  background: color-mix(in srgb, var(--focus-color) 10%, transparent);
+  border-color: color-mix(in srgb, var(--focus-color) 35%, transparent);
+  color: var(--v2-ink);
+}
+
+.item-icon {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--ui-well);
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.station-item:hover .item-icon {
+  background: var(--ui-well);
+}
+
+.station-item.active .item-icon {
+  background: color-mix(in srgb, var(--focus-color) 20%, transparent);
+}
+
+.item-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.playing-indicator {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 8px;
+}
+
+.playing-indicator span {
+  width: 2px;
+  background: var(--focus-color);
+  border-radius: 1px;
+  animation: eq-bar 0.8s ease-in-out infinite;
+}
+
+.playing-indicator span:nth-child(1) {
+  height: 3px;
+  animation-delay: 0s;
+}
+
+.playing-indicator span:nth-child(2) {
+  height: 6px;
+  animation-delay: 0.15s;
+}
+
+.playing-indicator span:nth-child(3) {
+  height: 4px;
+  animation-delay: 0.3s;
+}
+
+@keyframes eq-bar {
+  0%, 100% { height: 3px; }
+  50% { height: 8px; }
+}
+
+.item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.item-name {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-tags {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tag {
+  font-size: 8.5px;
+  font-weight: 500;
+  padding: 1px 5px;
+  background: var(--ui-well);
+  border-radius: 4px;
+  color: var(--v2-muted);
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.station-item:hover .tag {
+  background: var(--ui-hover);
+  color: var(--v2-secondary);
+}
+
+.station-item.active .tag {
+  background: color-mix(in srgb, var(--focus-color) 25%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 80%, white);
+}
+
+.item-desc {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--v2-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.station-item.active .item-desc {
+  color: var(--v2-secondary);
+}
+
+.scroll-to-playing-btn {
+  position: absolute;
+  bottom: 18px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--focus-color);
+  border: none;
+  border-radius: 50%;
+  color: var(--v2-ink);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+  z-index: 20;
+}
+
+.scroll-to-playing-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.scroll-to-playing-btn:active {
+  transform: scale(0.95);
+}
+
+.scroll-to-playing-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.fade-scale-enter-active,
+.fade-scale-leave-active {
+  transition: all 0.25s ease;
+}
+
+.fade-scale-enter-from,
+.fade-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.station-list-wrapper::-webkit-scrollbar {
+  width: 4px;
+}
+
+.station-list-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.station-list-wrapper::-webkit-scrollbar-thumb {
+  background: var(--ui-hover);
+  border-radius: 2px;
+}
+</style>

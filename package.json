@@ -1,0 +1,41 @@
+{
+  "name": "focus-island",
+  "private": true,
+  "version": "2.10.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "vite:build": "node scripts/check-visual-guards.mjs && vite build",
+    "vite:dev": "vite",
+    "preview": "vite preview",
+    "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml",
+    "visual:guard": "node scripts/check-visual-guards.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-app": "^2.0.0-alpha.1",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.3.1",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "@vueuse/core": "^14.2.1",
+    "@vueuse/motion": "^3.0.3",
+    "dompurify": "^3.4.17",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@tauri-apps/cli": "^2.8.4",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/tsconfig": "^0.7.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.8.2",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.8"
+  }
+}

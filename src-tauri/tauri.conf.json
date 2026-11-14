@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FlowIsle",
+  "version": "../package.json",
+  "identifier": "com.focus-island.desktop",
+  "build": {
+    "beforeDevCommand": "npm run vite:dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run vite:build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "",
+        "width": 500,
+        "height": 160,
+        "minWidth": 4,
+        "minHeight": 2,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false,
+        "x": 750,
+        "y": 0
+      },
+      {
+        "label": "panel",
+        "title": "专注清单",
+        "width": 420,
+        "height": 600,
+        "minWidth": 320,
+        "minHeight": 480,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**", "$RESOURCE/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.13"
+    },
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser"
+      }
+    },
+    "shortDescription": "FlowIsle - 灵动岛番茄钟",
+    "longDescription": "FlowIsle：屏幕顶部的灵动岛番茄钟，专注时在，需要时隐，从不打扰。"
+  },
+  "plugins": {
+    "fs": {},
+    "shell": {
+      "open": true
+    },
+    "updater": {
+      "active": true,
+      "dialog": false,
+      "endpoints": [
+        "https://github.com/ipfred/focus-island/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdFNkZBRTFGODUxMzY4M0QKUldROWFCT0ZINjV2ZmdpZkNUVExORlh1QTBFNkI3VXZUWlNuK0hyc1hjNnJEaVN5eEFabGJ2UkgK",
+      "windows": {
+        "installMode": "basicUi"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+* OK [CAPABILITY IMAP4rev1 ID IDLE] ready
+A1 OK LOGIN completed
+* ID ("name" {8}
+Coremail "support-url" NIL)
+A2 OK ID completed
+* FLAGS (\Seen \Deleted)
+* 3 EXISTS
+* OK [UIDVALIDITY 987] UIDs valid
+A3 OK [READ-ONLY] EXAMINE completed
+* CAPABILITY IMAP4rev1 ID IDLE
+A4 OK CAPABILITY completed
+* SEARCH 41 42
+A5 OK SEARCH completed
++ idling
+* 4 EXISTS
+A6 OK IDLE terminated
+* SEARCH 41 42 43 43
+A7 OK SEARCH completed
+* 4 FETCH (UID 43 ENVELOPE ("Fri, 13 Nov 2026 08:00:00 +0000" {30}
+=?UTF-8?Q?=E4=B8=AD=E6=96=87?= (("=?UTF-8?B?5rWL6K+V?=" NIL "fixture" "example.invalid")) NIL NIL NIL NIL NIL NIL NIL))
+A8 OK FETCH completed
+* SEARCH 41 42 43
+A9 OK SEARCH completed
